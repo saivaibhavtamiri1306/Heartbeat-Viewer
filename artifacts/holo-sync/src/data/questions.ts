@@ -480,6 +480,42 @@ export const BLUFF_RESPONSES = [
   "I'd like to drill deeper into that. Can you explain the underlying mechanism in technical detail?",
 ];
 
+export const STRESS_COOLDOWN_TRANSITIONS = [
+  "I can see you're under some pressure. Let me ask you something a little lighter to help you settle in.",
+  "Your biometrics suggest you're feeling the heat. Let's take a step back — here's something more straightforward for you.",
+  "I notice your stress levels are elevated. A good interviewer adapts. Let me ease the difficulty for a moment.",
+  "High heart rate detected. Let's shift gears — I'll ask something simpler so you can catch your breath and refocus.",
+  "Your pulse tells me this is intense for you. No shame in that. Here's an easier one to rebuild your confidence.",
+];
+
+export const CALM_ESCALATION_TRANSITIONS = [
+  "You've calmed down considerably. Good composure. But don't get too comfortable — let's see how you handle this.",
+  "Your heart rate has settled. That means you're ready for the real challenge. Here's a tough one.",
+  "I see you're relaxed now. Perfect. That means I can push you harder. Let's go.",
+  "Biometrics show you've recovered well. Time to turn up the heat. Answer this.",
+  "You seem very comfortable. Too comfortable, perhaps. Let me test your limits with something harder.",
+  "Your stress levels dropped — which means the questions weren't hard enough. Let's fix that.",
+];
+
+export function getAdaptiveQuestion(
+  domainId: string,
+  targetDifficulty: "easy" | "hard",
+  usedQuestionIds: Set<string>,
+  currentTopics: string[]
+): Question | null {
+  const allQuestions = QUESTIONS[domainId] || [];
+
+  const pool = allQuestions.filter(
+    q => q.difficulty === targetDifficulty && !usedQuestionIds.has(q.id)
+  );
+
+  const topicMatched = pool.filter(q => currentTopics.includes(q.topic));
+  const candidates = topicMatched.length > 0 ? topicMatched : pool;
+
+  if (candidates.length === 0) return null;
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
 export const PANEL_AVATARS = {
   upsc: [
     { name: "Chairman Singh", emotion: "stern" as const },

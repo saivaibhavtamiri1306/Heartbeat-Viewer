@@ -40,6 +40,7 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 - **Lip Sync**: Mouth animation driven by `requestAnimationFrame` loop synced to audio playback. Uses speech run ID tokens to prevent concurrency bugs.
 - **Subtitles**: Spoken text displayed as overlay on the 3D scene.
 - **Heart Rate Reactive Interviewer**: Monitors BPM history and detects spikes (>12 BPM increase), drops (>10 BPM decrease), and sustained elevation (>100 BPM for 20+ readings). Interviewer dynamically comments on heart rate changes with contextual responses and states your current BPM. 30-second cooldown between comments.
+- **Adaptive Biometric Difficulty**: Dynamically adjusts question difficulty based on real-time heart rate. When stressed (HR > baseline+15 or >95 BPM for 2+ consecutive questions), injects easier "cooling" questions with empathetic transitions. When calm (HR < baseline+5 or <80 BPM for 3+ questions), escalates to harder questions with stern transitions. 45-second cooldown between adaptations. UI shows ⬇ Cooling / ⬆ Escalating indicators.
 - **Bullshit Detector**: Bluff detection with stress analysis from rPPG data.
 - **Speech Recognition**: Mic-based input via Web Speech API.
 

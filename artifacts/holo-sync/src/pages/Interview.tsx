@@ -16,8 +16,11 @@ import {
   HR_SPIKE_RESPONSES,
   HR_DROP_RESPONSES,
   HR_ELEVATED_RESPONSES,
+  STRESS_COOLDOWN_TRANSITIONS,
+  CALM_ESCALATION_TRANSITIONS,
   PANEL_AVATARS,
   getFilteredQuestions,
+  getAdaptiveQuestion,
   type Domain,
   type InterviewConfig,
 } from "../data/questions";
@@ -69,6 +72,13 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
   const lastHrCommentRef = useRef(0);
   const baselineBpmRef = useRef<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const usedQuestionIdsRef = useRef<Set<string>>(new Set());
+  const adaptiveCooldownRef = useRef(0);
+  const [adaptiveMode, setAdaptiveMode] = useState<"normal" | "cooling" | "escalating">("normal");
+  const consecutiveCalmRef = useRef(0);
+  const consecutiveStressRef = useRef(0);
+  const activeQuestionRef = useRef<ReturnType<typeof getAdaptiveQuestion>>(null);
+  const wasAdaptiveRef = useRef(false);
 
   const [questions] = useState(() =>
     getFilteredQuestions(domain.id, config.topics, config.difficulty)
@@ -314,18 +324,86 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
 
   const askNextQuestion = useCallback(async (index: number) => {
     if (index >= questions.length) { endInterview(); return; }
-    const q = questions[index];
+
+    const now = Date.now();
+    const adaptiveCooldown = 45000;
+    const canAdapt = now - adaptiveCooldownRef.current > adaptiveCooldown;
+
+    const bpmHist = bpmHistoryRef.current;
+    const recentBpm = bpmHist.length >= 5 ? bpmHist.slice(-5).reduce((a, b) => a + b, 0) / 5 : 0;
+    const baseline = baselineBpmRef.current ?? 75;
+
+    let adaptiveQ = null as ReturnType<typeof getAdaptiveQuestion>;
+    let transitionMsg = "";
+    let didAdapt = false;
+
+    if (canAdapt && recentBpm > 0 && bpmHist.length >= 8) {
+      const stressThreshold = Math.max(baseline + 15, 95);
+      const calmThreshold = Math.min(baseline + 5, 80);
+
+      if (recentBpm > stressThreshold) {
+        consecutiveStressRef.current++;
+        consecutiveCalmRef.current = 0;
+        if (consecutiveStressRef.current >= 2) {
+          adaptiveQ = getAdaptiveQuestion(domain.id, "easy", usedQuestionIdsRef.current, config.topics);
+          if (adaptiveQ) {
+            transitionMsg = STRESS_COOLDOWN_TRANSITIONS[Math.floor(Math.random() * STRESS_COOLDOWN_TRANSITIONS.length)];
+            setAdaptiveMode("cooling");
+            adaptiveCooldownRef.current = now;
+            consecutiveStressRef.current = 0;
+            didAdapt = true;
+          }
+        }
+      } else if (recentBpm < calmThreshold) {
+        consecutiveCalmRef.current++;
+        consecutiveStressRef.current = 0;
+        if (consecutiveCalmRef.current >= 3) {
+          adaptiveQ = getAdaptiveQuestion(domain.id, "hard", usedQuestionIdsRef.current, config.topics);
+          if (adaptiveQ) {
+            transitionMsg = CALM_ESCALATION_TRANSITIONS[Math.floor(Math.random() * CALM_ESCALATION_TRANSITIONS.length)];
+            setAdaptiveMode("escalating");
+            adaptiveCooldownRef.current = now;
+            consecutiveCalmRef.current = 0;
+            didAdapt = true;
+          }
+        }
+      } else {
+        consecutiveStressRef.current = Math.max(0, consecutiveStressRef.current - 1);
+        consecutiveCalmRef.current = Math.max(0, consecutiveCalmRef.current - 1);
+        setAdaptiveMode("normal");
+      }
+    }
+
+    const q = adaptiveQ || questions[index];
+    usedQuestionIdsRef.current.add(q.id);
+    activeQuestionRef.current = q;
+    wasAdaptiveRef.current = didAdapt;
     setCurrentQuestionIndex(index);
+
     if (q.avatarIndex !== undefined) setActiveSpeakerIndex(q.avatarIndex);
+
+    if (transitionMsg) {
+      const bpmNote = recentBpm > 0 ? ` Your current heart rate is ${Math.round(recentBpm)} BPM.` : "";
+      const modeLabel = adaptiveQ?.difficulty === "easy" ? "⬇ ADAPTIVE COOLDOWN" : "⬆ ADAPTIVE ESCALATION";
+      addMessage({ role: "system", text: `🧬 ${modeLabel} — BIOMETRIC DIFFICULTY ADJUSTMENT` });
+      setAvatarEmotion(adaptiveQ?.difficulty === "easy" ? "empathetic" : "stern");
+      await speakMessage(transitionMsg + bpmNote, domain.panelMode ? "CHAIRMAN" : "HOLO-AI", false, 0);
+      await new Promise(r => setTimeout(r, 600));
+    }
+
     if (q.isInterrupt && domain.panelMode) {
       setAvatarEmotion("stern");
       addMessage({ role: "system", text: `⚡ INTERRUPT — ${q.avatarName} INTERVENES` });
       await new Promise(r => setTimeout(r, 500));
-    } else {
+    } else if (!transitionMsg) {
       setAvatarEmotion("neutral");
     }
+
     await speakMessage(q.text, q.avatarName, false, q.avatarIndex ?? 0);
-  }, [questions, domain.panelMode, speakMessage, addMessage]);
+    if (didAdapt) {
+      setTimeout(() => setAdaptiveMode("normal"), 5000);
+    }
+  }, [questions, domain.id, domain.panelMode, config.topics, speakMessage, addMessage]);
 
   const triggerEmpathy = useCallback(async () => {
     setEmpathyMode(true);
@@ -357,7 +435,8 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
       technical: Math.min(100, prev.technical + 5 + confBonus + Math.floor(Math.random() * 7)),
     }));
 
-    const currentQ = questions[currentQuestionIndex];
+    const currentQ = activeQuestionRef.current || questions[currentQuestionIndex];
+    const wasAdaptive = wasAdaptiveRef.current;
     await new Promise(r => setTimeout(r, 700));
 
     if (currentQ?.isBullshitTrigger && text.length > 20) {
@@ -368,7 +447,9 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
       await speakMessage(drillDown, currentQ.avatarName, true);
       setTimeout(() => setBluffDetected(false), 8000);
     } else {
-      await askNextQuestion(currentQuestionIndex + 1);
+      const nextIndex = wasAdaptive ? currentQuestionIndex : currentQuestionIndex + 1;
+      wasAdaptiveRef.current = false;
+      await askNextQuestion(nextIndex);
     }
   }, [userInput, speech, phase, micOn, questions, currentQuestionIndex,
       addMessage, speakMessage, askNextQuestion, stopListening, clearCurrentAnswer]);
@@ -376,7 +457,7 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
   const endInterview = useCallback(async () => {
     setPhase("ended");
     stopWebcam(); stopHeartbeat(); stopListening(); setMicOn(false);
-    window.speechSynthesis?.cancel();
+    tts.stop();
     const finalScore = Math.round((score.communication + score.technical + score.stress) / 3);
     addMessage({ role: "system", text: "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" });
     addMessage({ role: "system", text: `INTERVIEW COMPLETE — FINAL SCORE: ${finalScore}/100` });
@@ -427,6 +508,16 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
           {bluffDetected && (
             <span className="text-red-400 animate-pulse border border-red-400/30 rounded px-2 py-0.5 uppercase tracking-widest">
               🔍 Bluff Detected
+            </span>
+          )}
+          {adaptiveMode === "cooling" && (
+            <span className="text-green-400 animate-pulse border border-green-400/30 rounded px-2 py-0.5 uppercase tracking-widest">
+              ⬇ Cooling
+            </span>
+          )}
+          {adaptiveMode === "escalating" && (
+            <span className="text-orange-400 animate-pulse border border-orange-400/30 rounded px-2 py-0.5 uppercase tracking-widest">
+              ⬆ Escalating
             </span>
           )}
           {empathyMode && (
