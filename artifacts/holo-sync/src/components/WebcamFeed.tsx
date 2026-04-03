@@ -7,6 +7,8 @@ interface WebcamFeedProps {
   compact?: boolean;
   faceDetected?: boolean;
   faceBox?: FaceBox | null;
+  foreheadBox?: FaceBox | null;
+  cheekBox?: FaceBox | null;
   keypoints?: FaceKeypoint[];
   videoW?: number;
   videoH?: number;
@@ -17,7 +19,7 @@ interface WebcamFeedProps {
 
 export default function WebcamFeed({
   videoRef, isActive, compact,
-  faceDetected, faceBox, keypoints = [], videoW = 0, videoH = 0,
+  faceDetected, faceBox, foreheadBox, cheekBox, keypoints = [], videoW = 0, videoH = 0,
   bpm, calibrating, faceLoading,
 }: WebcamFeedProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -120,6 +122,34 @@ export default function WebcamFeed({
       ctx.restore();
     });
 
+    // ── Green ROI boxes (forehead + cheeks) — shows where heart rate is sampled
+    const drawROI = (roiBox: FaceBox, lbl: string) => {
+      const rx = roiBox.x * scaleToFill + offX;
+      const ry = roiBox.y * scaleToFill + offY;
+      const rw = roiBox.w * scaleToFill;
+      const rh = roiBox.h * scaleToFill;
+      const mx = dw - rx - rw;
+
+      ctx.save();
+      ctx.fillStyle = "rgba(0, 255, 0, 0.18)";
+      ctx.fillRect(mx, ry, rw, rh);
+      ctx.strokeStyle = "rgba(0, 255, 0, 0.7)";
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(mx, ry, rw, rh);
+
+      const lblSize = Math.max(7, Math.min(9, Math.round(rw * 0.12)));
+      ctx.font = `bold ${lblSize}px 'Orbitron', monospace`;
+      ctx.fillStyle = "rgba(0, 255, 0, 0.85)";
+      ctx.textAlign = "left";
+      ctx.fillText(lbl, mx + 2, ry + lblSize + 1);
+      ctx.restore();
+    };
+
+    if (foreheadBox && foreheadBox.w > 5 && foreheadBox.h > 3)
+      drawROI(foreheadBox, "FOREHEAD");
+    if (cheekBox && cheekBox.w > 5 && cheekBox.h > 3)
+      drawROI(cheekBox, "CHEEK");
+
     // ── BPM readout (above face box) ──────────────────────────────────────────
     const bpmTxt   = calibrating ? "● CALIBRATING" : bpm != null ? `♥  ${bpm} BPM` : "● READING";
     const bpmColor = (bpm != null && !calibrating)
@@ -155,7 +185,7 @@ export default function WebcamFeed({
     ctx.fillText(lockTxt, bx + bw, by + bh + lockSize + 3);
     ctx.restore();
 
-  }, [faceBox, keypoints, videoW, videoH, bpm, calibrating, faceDetected, isActive]);
+  }, [faceBox, foreheadBox, cheekBox, keypoints, videoW, videoH, bpm, calibrating, faceDetected, isActive]);
 
   return (
     <div

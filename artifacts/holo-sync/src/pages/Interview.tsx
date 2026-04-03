@@ -660,6 +660,8 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
             compact
             faceDetected={face.detected}
             faceBox={face.box}
+            foreheadBox={face.foreheadBox}
+            cheekBox={face.cheekBox}
             keypoints={face.keypoints}
             videoW={face.videoW}
             videoH={face.videoH}
