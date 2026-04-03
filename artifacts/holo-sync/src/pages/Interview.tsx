@@ -8,6 +8,7 @@ import { useWebcam } from "../hooks/useWebcam";
 import { useHeartbeat } from "../hooks/useHeartbeat";
 import { useFaceDetection } from "../hooks/useFaceDetection";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
+import { useTTS } from "../hooks/useTTS";
 import type { FaceBox } from "../hooks/useFaceDetection";
 import {
   EMPATHY_RESPONSES,
@@ -38,6 +39,7 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
   const { data: heartData, start: startHeartbeat, stop: stopHeartbeat, panic, calm } = useHeartbeat(videoRef, faceBoxRef, foreheadBoxRef, cheekBoxRef);
   const face = useFaceDetection(videoRef);
   const { data: speech, startListening, stopListening, clearCurrentAnswer } = useSpeechRecognition();
+  const tts = useTTS();
 
   useEffect(() => { faceBoxRef.current     = face.box         ?? null; }, [face.box]);
   useEffect(() => { foreheadBoxRef.current = face.foreheadBox ?? null; }, [face.foreheadBox]);
@@ -131,76 +133,66 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
     setMouthOpenness(0);
   }, []);
 
-  const speakMessage = useCallback((text: string, avatarName?: string, flagged?: boolean, avatarIndex?: number): Promise<void> => {
-    return new Promise(async (resolve) => {
-      const runId = ++speechRunIdRef.current;
+  const speakMessage = useCallback(async (text: string, avatarName?: string, flagged?: boolean, avatarIndex?: number): Promise<void> => {
+    const runId = ++speechRunIdRef.current;
 
-      setIsTyping(true);
-      const delay = Math.min(1800, text.length * 22);
-      await new Promise(r => setTimeout(r, delay));
+    setIsTyping(true);
+    const delay = Math.min(1200, text.length * 18);
+    await new Promise(r => setTimeout(r, delay));
 
-      if (runId !== speechRunIdRef.current) { resolve(); return; }
+    if (runId !== speechRunIdRef.current) return;
 
-      setIsTyping(false);
-      setIsSpeaking(true);
-      setSpokenText(text);
-      if (avatarIndex !== undefined) setActiveSpeakerIndex(avatarIndex);
-      addMessage({ role: "avatar", text, avatarName, flagged });
+    setIsTyping(false);
+    setIsSpeaking(true);
+    setSpokenText(text);
+    if (avatarIndex !== undefined) setActiveSpeakerIndex(avatarIndex);
+    addMessage({ role: "avatar", text, avatarName, flagged });
 
-      startMouthAnimation();
+    startMouthAnimation();
 
-      if (micOn) stopListening();
+    if (micOn) stopListening();
 
-      const cleanupSpeech = () => {
+    const voiceMap: Record<string, "alloy" | "echo" | "fable" | "onyx" | "nova" | "shimmer"> = {
+      "CHAIRMAN SINGH": "onyx",
+      "MEMBER DR. SHARMA": "echo",
+      "MEMBER ADV. KRISHNA": "fable",
+      "BRIG. MEHTA": "onyx",
+      "COL. VERMA": "echo",
+      "WING CDR. NAIR": "fable",
+      "EXAMINER": "nova",
+      "MD RAJIV KAPOOR": "onyx",
+      "HOLO-AI": "nova",
+      "CHAIRMAN": "onyx",
+    };
+    const selectedVoice = voiceMap[avatarName || ""] || "nova";
+
+    await tts.speak(text, {
+      voice: selectedVoice,
+      onStart: () => {
+        if (runId !== speechRunIdRef.current) return;
+      },
+      onEnd: () => {
         if (runId !== speechRunIdRef.current) return;
         setIsSpeaking(false);
         setSpokenText("");
         stopMouthAnimation();
-      };
-
-      if ("speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
-
-        await new Promise(r => setTimeout(r, 50));
-        if (runId !== speechRunIdRef.current) { resolve(); return; }
-
-        const utter = new SpeechSynthesisUtterance(text);
-        utter.rate = 0.88;
-        utter.pitch = 1.05;
-        const voices = window.speechSynthesis.getVoices();
-        const pick = voices.find(v => v.lang.startsWith("en") && v.name.includes("Google"))
-          || voices.find(v => v.lang.startsWith("en"))
-          || voices[0];
-        if (pick) utter.voice = pick;
-
-        utter.onboundary = (ev) => {
-          if (runId !== speechRunIdRef.current) return;
-          if (ev.name === "word") {
-            const spoken = text.slice(0, ev.charIndex + ev.charLength);
-            const remaining = text.slice(ev.charIndex + ev.charLength);
-            setSpokenText(spoken + (remaining ? "..." : ""));
-          }
-        };
-
-        utter.onend = () => {
-          cleanupSpeech();
-          if (runId === speechRunIdRef.current && micOn) { clearCurrentAnswer(); startListening(); }
-          resolve();
-        };
-        utter.onerror = () => {
-          cleanupSpeech();
-          resolve();
-        };
-        window.speechSynthesis.speak(utter);
-      } else {
-        setTimeout(() => {
-          cleanupSpeech();
-          if (runId === speechRunIdRef.current && micOn) { clearCurrentAnswer(); startListening(); }
-          resolve();
-        }, 3200);
-      }
+        if (micOn) { clearCurrentAnswer(); startListening(); }
+      },
+      onError: () => {
+        if (runId !== speechRunIdRef.current) return;
+        setIsSpeaking(false);
+        setSpokenText("");
+        stopMouthAnimation();
+        if (micOn) { clearCurrentAnswer(); startListening(); }
+      },
     });
-  }, [addMessage, micOn, startListening, stopListening, clearCurrentAnswer, startMouthAnimation, stopMouthAnimation]);
+
+    if (runId === speechRunIdRef.current) {
+      setIsSpeaking(false);
+      setSpokenText("");
+      stopMouthAnimation();
+    }
+  }, [addMessage, micOn, startListening, stopListening, clearCurrentAnswer, startMouthAnimation, stopMouthAnimation, tts]);
 
   useEffect(() => {
     const init = async () => {
@@ -233,7 +225,7 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
       stopWebcam(); stopHeartbeat();
       stopListening();
       stopMouthAnimation();
-      window.speechSynthesis?.cancel();
+      tts.stop();
     };
   }, []);
 

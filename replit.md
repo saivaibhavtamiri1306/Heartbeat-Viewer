@@ -36,14 +36,16 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 - **5 Interview Domains**: UPSC, SWE, NDA, Medical, Investment Banking — each with domain-specific educational backgrounds, topic selection, and Easy/Medium/Hard difficulty levels.
 - **Interview Configuration**: After domain selection, users choose their educational background (B.Tech, BA, MBBS, etc.), difficulty level, and specific topics. Questions are filtered and weighted by difficulty.
 - **Cross-Fire Panel Mode**: UPSC and NDA have 3-avatar panels. Active speaker is highlighted with glow + scale. Other avatars are dimmed.
-- **Lip Sync**: Mouth animation driven by `requestAnimationFrame` loop synced to SpeechSynthesis `onboundary` events. Uses speech run ID tokens to prevent concurrency bugs.
-- **Subtitles**: Spoken text displayed as overlay on the 3D scene, progressively updated word-by-word.
+- **AI TTS Voices**: OpenAI-powered text-to-speech via `/api/tts` endpoint. Each interviewer persona has a distinct voice (onyx for chairman, echo for technical, nova for default). Falls back to browser SpeechSynthesis if API fails.
+- **Lip Sync**: Mouth animation driven by `requestAnimationFrame` loop synced to audio playback. Uses speech run ID tokens to prevent concurrency bugs.
+- **Subtitles**: Spoken text displayed as overlay on the 3D scene.
 - **Heart Rate Reactive Interviewer**: Monitors BPM history and detects spikes (>12 BPM increase), drops (>10 BPM decrease), and sustained elevation (>100 BPM for 20+ readings). Interviewer dynamically comments on heart rate changes with contextual responses and states your current BPM. 30-second cooldown between comments.
 - **Bullshit Detector**: Bluff detection with stress analysis from rPPG data.
 - **Speech Recognition**: Mic-based input via Web Speech API.
 
 ### Key Files
 - `src/hooks/useHeartbeat.ts` — rPPG algorithm (POS, Butterworth, consensus BPM)
+- `src/hooks/useTTS.ts` — AI TTS hook with OpenAI voice playback + browser fallback
 - `src/components/Avatar3D.tsx` — 3D avatar with HumanHead, panel mode, lip sync, subtitles
 - `src/pages/InterviewConfig.tsx` — Pre-interview config (background, difficulty, topics)
 - `src/pages/Interview.tsx` — Main interview page (speech, questions, avatar wiring)
@@ -52,9 +54,15 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 - `src/data/questions.ts` — Question bank for all 5 domains
 - `src/hooks/useSpeechRecognition.ts` — Speech-to-text hook
 
+### API Server (`artifacts/api-server`)
+- `/api/tts` — POST `{text, voice}` → audio/mpeg. Lazy-loads OpenAI module. Max 2000 chars.
+- Vite proxy in holo-sync forwards `/api` → `http://localhost:8080`
+- Uses `@workspace/integrations-openai-ai-server` lib for OpenAI TTS (gpt-audio model)
+
 ### Architecture Notes
 - Avatar3D props: `activeSpeakerIndex`, `mouthOpenness`, `spokenText` for speaker tracking/lip sync
 - Speech concurrency: `speechRunIdRef` token prevents stale callbacks from cancelled utterances
 - Mouth animation: Single RAF loop with `mouthAnimActiveRef` guard prevents duplicate loops
+- TTS voice mapping: onyx (chairman), echo (technical), fable (third panelist), nova (default/female)
 - MediaPipe WASM at `/mediapipe-wasm/`, model at `/mediapipe-models/face_landmarker.task`
 - Design: bg #000408, cyan #00d4ff, purple #7700ff, red #ff4444, font Orbitron
