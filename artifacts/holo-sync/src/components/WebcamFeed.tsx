@@ -139,6 +139,23 @@ export default function WebcamFeed({
       ctx.restore();
     }
 
+    // ── Green ROI box on cheek area (under eye to chin)
+    if (cheekBox && cheekBox.w > 5 && cheekBox.h > 3) {
+      const rx = cheekBox.x * scaleToFill + offX;
+      const ry = cheekBox.y * scaleToFill + offY;
+      const rw = cheekBox.w * scaleToFill;
+      const rh = cheekBox.h * scaleToFill;
+      const mx = dw - rx - rw;
+
+      ctx.save();
+      ctx.fillStyle = "rgba(0, 255, 0, 0.25)";
+      ctx.fillRect(mx, ry, rw, rh);
+      ctx.strokeStyle = "rgba(0, 255, 0, 0.6)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(mx, ry, rw, rh);
+      ctx.restore();
+    }
+
     // ── BPM readout (above face box) ──────────────────────────────────────────
     const bpmTxt   = calibrating ? "● CALIBRATING" : bpm != null ? `♥  ${bpm} BPM` : "● READING";
     const bpmColor = (bpm != null && !calibrating)
