@@ -14,23 +14,13 @@ async function getAudioModule() {
 
 router.post("/transcribe", async (req, res) => {
   try {
-    const contentType = req.headers["content-type"] || "";
-    let audioBuffer: Buffer;
-
-    if (contentType.includes("application/json")) {
-      const { audio, format } = req.body;
-      if (!audio) {
-        res.status(400).json({ error: "audio data is required" });
-        return;
-      }
-      audioBuffer = Buffer.from(audio, "base64");
-    } else {
-      const chunks: Buffer[] = [];
-      for await (const chunk of req) {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-      }
-      audioBuffer = Buffer.concat(chunks);
+    const { audio } = req.body;
+    if (!audio || typeof audio !== "string") {
+      res.status(400).json({ error: "audio (base64) is required" });
+      return;
     }
+
+    const audioBuffer = Buffer.from(audio, "base64");
 
     if (audioBuffer.length < 100) {
       res.status(400).json({ error: "Audio too short" });
@@ -42,14 +32,22 @@ router.post("/transcribe", async (req, res) => {
       return;
     }
 
-    const { ensureCompatibleFormat, speechToText } = await getAudioModule();
+    const { openai, detectAudioFormat } = await getAudioModule();
+    const { toFile } = await import("openai");
 
-    const { buffer: compatBuffer, format: detectedFormat } = await ensureCompatibleFormat(audioBuffer);
-    const text = await speechToText(compatBuffer, detectedFormat);
+    const detected = detectAudioFormat(audioBuffer);
+    const ext = detected === "unknown" ? "webm" : detected;
+    const file = await toFile(audioBuffer, `audio.${ext}`);
 
-    res.json({ text: text.trim() });
+    const response = await openai.audio.transcriptions.create({
+      file,
+      model: "gpt-4o-mini-transcribe",
+    });
+
+    res.json({ text: (response.text || "").trim() });
   } catch (err: any) {
-    console.error("Transcribe error:", err?.message || err);
+    const msg = err?.message || String(err);
+    console.error("Transcribe error:", msg);
     res.status(500).json({ error: "Transcription failed" });
   }
 });
