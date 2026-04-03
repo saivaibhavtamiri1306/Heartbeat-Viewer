@@ -131,9 +131,9 @@ export default function WebcamFeed({
       const mx = dw - rx - rw;
 
       ctx.save();
-      ctx.fillStyle = "rgba(0, 100, 0, 1.0)";
+      ctx.fillStyle = "#003300";
       ctx.fillRect(mx, ry, rw, rh);
-      ctx.strokeStyle = "#00cc00";
+      ctx.strokeStyle = "#005500";
       ctx.lineWidth = 2;
       ctx.strokeRect(mx, ry, rw, rh);
       ctx.restore();

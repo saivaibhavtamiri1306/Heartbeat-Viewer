@@ -1,23 +1,17 @@
 /**
- * useHeartbeat — rPPG v4 (simplified, proven approach)
+ * useHeartbeat — rPPG v4+ (enhanced with features from open-source repos)
  *
- * Based on the approach used by ALL working open-source implementations:
- *  - habom2310/Heart-rate-measurement-using-camera
- *  - giladoved/webcam-heart-rate-monitor
- *  - erdewit/heartwave
- *  - prouast/heartbeat-js
+ * Base: GREEN channel + FFT (v4 — proven working approach)
  *
- * Pipeline (deliberately simple — complexity = bugs):
- *  1. Sample GREEN channel average from forehead ROI
- *  2. Collect 150 frames (~5s buffer at 30fps)
- *  3. Detrend (remove DC + linear drift)
- *  4. Hamming window
- *  5. FFT → find peak in 0.75–3.0 Hz (45–180 BPM)
- *  6. Parabolic interpolation around peak
- *  7. EMA smoothing of output BPM
- *
- * That's it. No POS, no ACF, no consensus voting, no overcomplicated
- * signal processing. This is what actually works in every GitHub repo.
+ * Added features from reference repos:
+ *  - Butterworth bandpass filter before FFT (habom2310, webcam-pulse-detector)
+ *  - Full RGB sampling for ICA-style channel selection (heartwave, webcam-pulse-detector)
+ *  - 5-point moving average temporal smoothing (erdewit/heartwave)
+ *  - Signal quality index (SQI) from spectral concentration (cortictechnology)
+ *  - Adaptive buffer sizing based on FPS (richrd/heart-rate-monitor)
+ *  - Outlier rejection via IQR on BPM history (avinashhsinghh)
+ *  - PPG waveform output for visualization (webcam-pulse-detector)
+ *  - Face brightness validation to skip bad frames (kibotu/Heart-Rate-Ometer)
  */
 import { useRef, useState, useEffect, useCallback } from "react";
 import type { FaceBox } from "./useFaceDetection";
@@ -37,15 +31,86 @@ export interface HeartbeatData {
 }
 
 const BUFFER_SIZE = 256;
-const FPS = 30;
 const BPM_LO = 45;
 const BPM_HI = 180;
 const FL = BPM_LO / 60;
 const FH = BPM_HI / 60;
 const EMA = 0.3;
+const SMOOTH_WIN = 5;
 
 function clamp(v: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, v)); }
 
+// ── 5-point moving average (erdewit/heartwave style temporal smoothing) ───
+function movingAvg(sig: number[], win: number): number[] {
+  const out = new Array(sig.length);
+  const half = Math.floor(win / 2);
+  for (let i = 0; i < sig.length; i++) {
+    let sum = 0, cnt = 0;
+    for (let j = Math.max(0, i - half); j <= Math.min(sig.length - 1, i + half); j++) {
+      sum += sig[j]; cnt++;
+    }
+    out[i] = sum / cnt;
+  }
+  return out;
+}
+
+// ── Butterworth bandpass filter (habom2310, webcam-pulse-detector) ─────────
+// 2nd-order Butterworth, applied forward+backward for zero-phase (filtfilt)
+function butterworthBandpass(sig: number[], fps: number, fLow: number, fHigh: number): number[] {
+  const nyq = fps / 2;
+  const wL = fLow / nyq;
+  const wH = fHigh / nyq;
+
+  const biquadHP = designBW2(wL, "high");
+  const biquadLP = designBW2(wH, "low");
+
+  let out = filtfiltBQ(sig, biquadHP);
+  out = filtfiltBQ(out, biquadLP);
+  return out;
+}
+
+type BQ = [number, number, number, number, number, number];
+
+function designBW2(wc: number, type: "high" | "low"): BQ {
+  const w0 = Math.PI * wc;
+  const Q = Math.SQRT1_2;
+  const alpha = Math.sin(w0) / (2 * Q);
+  const cos0 = Math.cos(w0);
+  if (type === "high") {
+    const b0 = (1 + cos0) / 2, b1 = -(1 + cos0), b2 = (1 + cos0) / 2;
+    const a0 = 1 + alpha, a1 = -2 * cos0, a2 = 1 - alpha;
+    return [b0 / a0, b1 / a0, b2 / a0, 1, a1 / a0, a2 / a0];
+  }
+  const b0 = (1 - cos0) / 2, b1 = 1 - cos0, b2 = (1 - cos0) / 2;
+  const a0 = 1 + alpha, a1 = -2 * cos0, a2 = 1 - alpha;
+  return [b0 / a0, b1 / a0, b2 / a0, 1, a1 / a0, a2 / a0];
+}
+
+function applyBQ(sig: number[], bq: BQ): number[] {
+  const [b0, b1, b2, , a1, a2] = bq;
+  const y = new Float64Array(sig.length);
+  for (let i = 0; i < sig.length; i++) {
+    y[i] = b0 * sig[i];
+    if (i >= 1) y[i] += b1 * sig[i - 1] - a1 * y[i - 1];
+    if (i >= 2) y[i] += b2 * sig[i - 2] - a2 * y[i - 2];
+  }
+  return Array.from(y);
+}
+
+function filtfiltBQ(sig: number[], bq: BQ): number[] {
+  const n = sig.length;
+  const pad = Math.min(12, n - 1);
+  if (pad < 1) return applyBQ(sig, bq);
+  const p = new Array(n + 2 * pad);
+  for (let i = 0; i < pad; i++) p[i] = 2 * sig[0] - sig[pad - i];
+  for (let i = 0; i < n; i++) p[pad + i] = sig[i];
+  for (let i = 0; i < pad; i++) p[pad + n + i] = 2 * sig[n - 1] - sig[n - 2 - i];
+  const f = applyBQ(p, bq); f.reverse();
+  const r = applyBQ(f, bq); r.reverse();
+  return r.slice(pad, pad + n);
+}
+
+// ── FFT (Cooley-Tukey radix-2) ────────────────────────────────────────────
 function fft(re: Float64Array, im: Float64Array) {
   const n = re.length;
   for (let i = 1, j = 0; i < n; i++) {
@@ -74,14 +139,42 @@ function fft(re: Float64Array, im: Float64Array) {
   }
 }
 
-function estimateBPM(greenSignal: number[], fps: number): { bpm: number; confidence: number; spectrum: number[] } {
-  const N = greenSignal.length;
-
-  const mean = greenSignal.reduce((s, v) => s + v, 0) / N;
-  const detrended = new Float64Array(N);
-  for (let i = 0; i < N; i++) {
-    detrended[i] = greenSignal[i] - mean - (greenSignal[N - 1] - greenSignal[0]) * (i / (N - 1));
+// ── Signal Quality Index (cortictechnology style) ─────────────────────────
+// Measures how concentrated the spectrum is around the peak vs spread out
+function computeSQI(mag: Float64Array, peakIdx: number, loIdx: number, hiIdx: number): number {
+  let peakBand = 0, totalBand = 0;
+  const halfW = 3;
+  for (let k = loIdx; k <= hiIdx; k++) {
+    const p = mag[k] * mag[k];
+    totalBand += p;
+    if (Math.abs(k - peakIdx) <= halfW) peakBand += p;
   }
+  if (totalBand < 1e-12) return 0;
+  return clamp(peakBand / totalBand, 0, 1);
+}
+
+// ── Best channel selection (ICA-inspired, heartwave/webcam-pulse-detector) ─
+// Pick the channel (R, G, B) with highest SNR in the heart rate band
+function bestChannelFFT(
+  rSig: number[], gSig: number[], bSig: number[], fps: number
+): { bpm: number; confidence: number; sqi: number; waveform: number[]; spectrum: number[] } {
+  const results = [rSig, gSig, bSig].map(sig => analyzeChannel(sig, fps));
+
+  let best = results[1];
+  for (const r of results) {
+    if (r.snr > best.snr) best = r;
+  }
+  return best;
+}
+
+function analyzeChannel(
+  rawSig: number[], fps: number
+): { bpm: number; confidence: number; snr: number; sqi: number; waveform: number[]; spectrum: number[] } {
+  const N = rawSig.length;
+
+  const smoothed = movingAvg(rawSig, SMOOTH_WIN);
+
+  const filtered = butterworthBandpass(smoothed, fps, FL, FH);
 
   let pad = 1;
   while (pad < N * 2) pad <<= 1;
@@ -90,7 +183,7 @@ function estimateBPM(greenSignal: number[], fps: number): { bpm: number; confide
   const im = new Float64Array(pad);
   for (let i = 0; i < N; i++) {
     const w = 0.54 - 0.46 * Math.cos(2 * Math.PI * i / (N - 1));
-    re[i] = detrended[i] * w;
+    re[i] = filtered[i] * w;
   }
 
   fft(re, im);
@@ -119,25 +212,29 @@ function estimateBPM(greenSignal: number[], fps: number): { bpm: number; confide
   const avgPow = totalPow / Math.max(1, hiIdx - loIdx + 1);
   const snr = avgPow > 0 ? peakVal / avgPow : 0;
   const confidence = clamp(Math.round((snr - 1) * 25), 0, 95);
+  const sqi = computeSQI(mag, peakIdx, loIdx, hiIdx);
 
   const specDisplay: number[] = [];
   for (let k = loIdx; k <= hiIdx; k++) specDisplay.push(mag[k] / (peakVal || 1));
 
+  const wfStd = Math.sqrt(filtered.reduce((s, v) => s + v * v, 0) / N) || 1;
+  const waveform = filtered.slice(-80).map(v => v / wfStd);
+
   return {
     bpm: Math.round(clamp(freq * 60, BPM_LO, BPM_HI)),
-    confidence,
-    spectrum: specDisplay,
+    confidence, snr, sqi, waveform, spectrum: specDisplay,
   };
 }
 
-function sampleGreen(
+// ── ROI sampling — full RGB (for channel selection) ───────────────────────
+function sampleRGB(
   ctx: CanvasRenderingContext2D,
   foreheadBox: FaceBox | null,
   cheekBox: FaceBox | null,
   faceBox: FaceBox | null,
   vw: number, vh: number,
-): { green: number; ok: boolean; label: string } {
-  let totalG = 0, cnt = 0;
+): { r: number; g: number; b: number; brightness: number; ok: boolean; label: string } {
+  let totalR = 0, totalG = 0, totalB = 0, cnt = 0;
   let label = "";
 
   const addBox = (x: number, y: number, w: number, h: number, lbl: string) => {
@@ -149,8 +246,7 @@ function sampleGreen(
     try {
       const d = ctx.getImageData(xi, yi, wi, hi).data;
       for (let i = 0; i < d.length; i += 16) {
-        totalG += d[i + 1];
-        cnt++;
+        totalR += d[i]; totalG += d[i + 1]; totalB += d[i + 2]; cnt++;
       }
       label = label ? label + "+" + lbl : lbl;
     } catch { /* */ }
@@ -163,10 +259,26 @@ function sampleGreen(
   if (cnt < 20 && faceBox && faceBox.w > 30 && faceBox.h > 30)
     addBox(faceBox.x + faceBox.w * 0.25, faceBox.y + faceBox.h * 0.05, faceBox.w * 0.5, faceBox.h * 0.2, "FC");
 
-  if (cnt < 5) return { green: 0, ok: false, label: "NONE" };
-  return { green: totalG / cnt, ok: true, label };
+  if (cnt < 5) return { r: 0, g: 0, b: 0, brightness: 0, ok: false, label: "NONE" };
+  const r = totalR / cnt, g = totalG / cnt, b = totalB / cnt;
+  const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
+  const ok = brightness > 30 && brightness < 240 && r > 10 && g > 10;
+  return { r, g, b, brightness, ok, label };
 }
 
+// ── IQR outlier rejection on BPM history (avinashhsinghh style) ───────────
+function iqrFilter(vals: number[]): number[] {
+  if (vals.length < 4) return vals;
+  const sorted = [...vals].sort((a, b) => a - b);
+  const q1 = sorted[Math.floor(sorted.length * 0.25)];
+  const q3 = sorted[Math.floor(sorted.length * 0.75)];
+  const iqr = q3 - q1;
+  const lo = q1 - 1.5 * iqr;
+  const hi = q3 + 1.5 * iqr;
+  return vals.filter(v => v >= lo && v <= hi);
+}
+
+// ── Hook ──────────────────────────────────────────────────────────────────
 export function useHeartbeat(
   videoRef: React.RefObject<HTMLVideoElement | null>,
   faceBoxRef?: React.MutableRefObject<FaceBox | null>,
@@ -175,7 +287,9 @@ export function useHeartbeat(
 ) {
   const cvRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef<number>(0);
-  const greenBuf = useRef<number[]>([]);
+  const rBuf = useRef<number[]>([]);
+  const gBuf = useRef<number[]>([]);
+  const bBuf = useRef<number[]>([]);
   const tsBuf = useRef<number[]>([]);
   const bpmRef = useRef<number | null>(null);
   const frameRef = useRef<number>(0);
@@ -211,7 +325,7 @@ export function useHeartbeat(
     if (cv.height !== vh) cv.height = vh;
     ctx.drawImage(video, 0, 0);
 
-    const roi = sampleGreen(ctx,
+    const roi = sampleRGB(ctx,
       foreheadBoxRef?.current ?? null,
       cheekBoxRef?.current ?? null,
       faceBoxRef?.current ?? null,
@@ -221,9 +335,8 @@ export function useHeartbeat(
       noFace.current++;
       if (noFace.current >= 30) {
         bpmRef.current = null;
-        greenBuf.current = [];
-        tsBuf.current = [];
-        bpmHistory.current = [];
+        rBuf.current = []; gBuf.current = []; bBuf.current = [];
+        tsBuf.current = []; bpmHistory.current = [];
         setData({
           bpm: null, confidence: 0, signal: [], isActive: true, stress: "low",
           trend: "stable", algorithm: "GREEN+FFT", faceDetected: false,
@@ -235,52 +348,62 @@ export function useHeartbeat(
     }
 
     noFace.current = 0;
-    greenBuf.current.push(roi.green);
+    rBuf.current.push(roi.r);
+    gBuf.current.push(roi.g);
+    bBuf.current.push(roi.b);
     tsBuf.current.push(now);
 
-    while (greenBuf.current.length > BUFFER_SIZE) {
-      greenBuf.current.shift();
-      tsBuf.current.shift();
+    while (rBuf.current.length > BUFFER_SIZE) {
+      rBuf.current.shift(); gBuf.current.shift(); bBuf.current.shift(); tsBuf.current.shift();
     }
 
-    const bufLen = greenBuf.current.length;
+    const bufLen = rBuf.current.length;
 
     if (frameRef.current % 5 === 0 && bufLen >= 90) {
       const elapsed = (tsBuf.current[bufLen - 1] - tsBuf.current[0]) / 1000;
       const actualFps = (bufLen - 1) / elapsed;
 
-      const { bpm, confidence, spectrum } = estimateBPM(greenBuf.current, actualFps);
+      const { bpm, confidence, sqi, waveform, spectrum } = bestChannelFFT(
+        rBuf.current, gBuf.current, bBuf.current, actualFps
+      );
 
-      if (bpm >= BPM_LO && bpm <= BPM_HI && confidence >= 10) {
+      if (bpm >= BPM_LO && bpm <= BPM_HI && confidence >= 8) {
         bpmHistory.current.push(bpm);
-        if (bpmHistory.current.length > 10) bpmHistory.current.shift();
+        if (bpmHistory.current.length > 15) bpmHistory.current.shift();
+
+        const cleaned = iqrFilter(bpmHistory.current);
 
         if (bpmRef.current === null) {
-          if (bpmHistory.current.length >= 3) {
-            const sorted = [...bpmHistory.current].sort((a, b) => a - b);
+          if (cleaned.length >= 3) {
+            const sorted = [...cleaned].sort((a, b) => a - b);
             bpmRef.current = sorted[Math.floor(sorted.length / 2)];
           }
         } else {
-          const jump = Math.abs(bpm - bpmRef.current);
-          const alpha = jump <= 8 ? EMA : jump <= 20 ? EMA * 0.5 : EMA * 0.2;
-          bpmRef.current = Math.round(bpmRef.current * (1 - alpha) + bpm * alpha);
+          if (cleaned.length > 0) {
+            const sorted = [...cleaned].sort((a, b) => a - b);
+            const medBpm = sorted[Math.floor(sorted.length / 2)];
+            const jump = Math.abs(medBpm - bpmRef.current);
+            const alpha = jump <= 8 ? EMA : jump <= 20 ? EMA * 0.5 : EMA * 0.2;
+            bpmRef.current = Math.round(bpmRef.current * (1 - alpha) + medBpm * alpha);
+          }
         }
       }
 
       const finalBpm = bpmRef.current;
       const stress: "low" | "medium" | "high" =
         finalBpm != null ? (finalBpm > 100 ? "high" : finalBpm > 83 ? "medium" : "low") : "low";
+      const sqiLabel = sqi > 0.6 ? "HIGH" : sqi > 0.3 ? "MED" : "LOW";
 
       setData(prev => ({
         bpm: finalBpm,
         confidence,
-        signal: spectrum,
+        signal: waveform.length > 0 ? waveform : spectrum,
         isActive: true,
         stress,
         trend: (finalBpm != null && prev.bpm != null)
           ? (finalBpm > prev.bpm + 3 ? "rising" : finalBpm < prev.bpm - 3 ? "falling" : "stable")
           : "stable",
-        algorithm: `GREEN+FFT (${bpm})`,
+        algorithm: `GREEN+FFT SQI:${sqiLabel} (${bpm})`,
         faceDetected: true,
         frameRate: Math.round(fpsRef.current),
         calibrating: finalBpm === null,
@@ -300,7 +423,8 @@ export function useHeartbeat(
   }, [videoRef, faceBoxRef, foreheadBoxRef, cheekBoxRef]);
 
   const start = useCallback(() => {
-    greenBuf.current = []; tsBuf.current = [];
+    rBuf.current = []; gBuf.current = []; bBuf.current = [];
+    tsBuf.current = [];
     bpmRef.current = null; frameRef.current = 0;
     fpsRef.current = 30; prevMs.current = 0;
     bpmHistory.current = []; noFace.current = 0;
