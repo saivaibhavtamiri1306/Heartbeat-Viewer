@@ -288,7 +288,13 @@ export default function Interview({ domain, onEnd }: InterviewProps) {
 
         {/* Left Sidebar */}
         <div className="w-64 shrink-0 flex flex-col gap-2 p-2 border-r border-cyan-500/20 overflow-y-auto">
-          <WebcamFeed videoRef={videoRef} isActive={camActive} compact />
+          <WebcamFeed
+            videoRef={videoRef}
+            isActive={camActive}
+            compact
+            faceDetected={heartData.faceDetected}
+            roiLabel={heartData.roiDebug}
+          />
 
           {camError && (
             <div className="text-xs text-red-400 font-mono bg-red-500/10 border border-red-500/30 rounded p-2">
