@@ -1,18 +1,19 @@
 /**
- * useHeartbeat — Browser rPPG (remote photoplethysmography)
+ * useHeartbeat — Browser rPPG with optional MediaPipe face-box ROI
  *
- * Pipeline (matches best-practice reference implementations):
- *  1. Multi-region ROI auto-selection — picks best of 5 candidate face zones
- *  2. Collect R, G, B channel means into a 12-second ring buffer
- *  3. Linear detrend — removes DC offset and linear trend
- *  4. 2nd-order Butterworth bandpass (0.75–3.0 Hz = 45–180 BPM), zero-phase
- *  5. Select green channel (hemoglobin absorption peak)
- *  6. Hann window + 4× zero-padded FFT
- *  7. Parabolic peak interpolation for sub-bin accuracy
- *  8. SNR gate (peak/band-mean ≥ 2.0)
- *  9. Temporal EMA smoothing + jump rejection
+ * When faceBox is provided (from useFaceDetection), uses the exact forehead
+ * region of the detected face as ROI — this is how the reference video works.
+ * Falls back to multi-candidate scanning when face is not yet detected.
+ *
+ * Pipeline:
+ *  1. ROI extraction — face forehead (top 30% of face box) when detected
+ *  2. Linear detrend
+ *  3. 2nd-order Butterworth bandpass 0.75–3.0 Hz (45–180 BPM), zero-phase
+ *  4. Green channel FFT with 4× zero-padding + parabolic interpolation
+ *  5. SNR gate + EMA temporal smoothing
  */
 import { useRef, useState, useEffect, useCallback } from "react";
+import type { FaceBox } from "./useFaceDetection";
 
 export interface HeartbeatData {
   bpm: number | null;
@@ -30,7 +31,7 @@ export interface HeartbeatData {
 
 // ─── Math ─────────────────────────────────────────────────────────────────────
 const mean = (a: number[]) => a.reduce((s, v) => s + v, 0) / (a.length || 1);
-const std = (a: number[]) => {
+const std  = (a: number[]) => {
   const m = mean(a);
   return Math.sqrt(a.reduce((s, v) => s + (v - m) ** 2, 0) / (a.length || 1)) || 1e-10;
 };
@@ -39,39 +40,27 @@ const std = (a: number[]) => {
 function linearDetrend(sig: number[]): number[] {
   const n = sig.length;
   if (n < 2) return [...sig];
-  const x = Array.from({ length: n }, (_, i) => i);
-  const xm = (n - 1) / 2;
-  const ym = mean(sig);
+  const xm = (n - 1) / 2, ym = mean(sig);
   let num = 0, den = 0;
-  for (let i = 0; i < n; i++) { num += (x[i] - xm) * (sig[i] - ym); den += (x[i] - xm) ** 2; }
+  for (let i = 0; i < n; i++) { num += (i - xm) * (sig[i] - ym); den += (i - xm) ** 2; }
   const slope = den !== 0 ? num / den : 0;
   const intercept = ym - slope * xm;
   return sig.map((v, i) => v - (slope * i + intercept));
 }
 
-// ─── Butterworth 2nd-order IIR coefficients ───────────────────────────────────
-// Using bilinear transform (pre-warped). Returns {b, a} for Direct Form II.
-function butter2HP(fc: number, fs: number): { b: [number, number, number]; a: [number, number, number] } {
-  const w = 2 * Math.tan(Math.PI * fc / fs);          // pre-warped analog freq
-  const w2 = w * w, sq2 = Math.SQRT2;
+// ─── 2nd-order Butterworth via bilinear transform ────────────────────────────
+type Coeff3 = [number, number, number];
+function butter2HP(fc: number, fs: number): { b: Coeff3; a: Coeff3 } {
+  const w = 2 * Math.tan(Math.PI * fc / fs), w2 = w * w, sq2 = Math.SQRT2;
   const norm = 4 + 2 * sq2 * w + w2;
-  return {
-    b: [(4) / norm, (-8) / norm, (4) / norm],
-    a: [1, (2 * w2 - 8) / norm, (4 - 2 * sq2 * w + w2) / norm],
-  };
+  return { b: [4 / norm, -8 / norm, 4 / norm], a: [1, (2 * w2 - 8) / norm, (4 - 2 * sq2 * w + w2) / norm] };
 }
-function butter2LP(fc: number, fs: number): { b: [number, number, number]; a: [number, number, number] } {
-  const w = 2 * Math.tan(Math.PI * fc / fs);
-  const w2 = w * w, sq2 = Math.SQRT2;
+function butter2LP(fc: number, fs: number): { b: Coeff3; a: Coeff3 } {
+  const w = 2 * Math.tan(Math.PI * fc / fs), w2 = w * w, sq2 = Math.SQRT2;
   const norm = 4 + 2 * sq2 * w + w2;
-  return {
-    b: [w2 / norm, 2 * w2 / norm, w2 / norm],
-    a: [1, (2 * w2 - 8) / norm, (4 - 2 * sq2 * w + w2) / norm],
-  };
+  return { b: [w2 / norm, 2 * w2 / norm, w2 / norm], a: [1, (2 * w2 - 8) / norm, (4 - 2 * sq2 * w + w2) / norm] };
 }
-
-// Apply a 2nd-order IIR filter in one direction
-function applyIIR(sig: number[], b: [number, number, number], a: [number, number, number]): number[] {
+function applyIIR(sig: number[], b: Coeff3, a: Coeff3): number[] {
   const y = new Array(sig.length).fill(0);
   for (let i = 0; i < sig.length; i++) {
     let v = b[0] * sig[i];
@@ -81,32 +70,22 @@ function applyIIR(sig: number[], b: [number, number, number], a: [number, number
   }
   return y;
 }
-
-// Zero-phase (forward + backward) application — equivalent to SciPy filtfilt
-function filtfilt(sig: number[], b: [number, number, number], a: [number, number, number]): number[] {
+function filtfilt(sig: number[], b: Coeff3, a: Coeff3): number[] {
   const fwd = applyIIR(sig, b, a);
   return applyIIR([...fwd].reverse(), b, a).reverse();
 }
-
-// ─── Butterworth bandpass (HP cascade LP) ────────────────────────────────────
-function bandpass(sig: number[], loHz: number, hiHz: number, fs: number): number[] {
-  const hp = butter2HP(loHz, fs);
-  const lp = butter2LP(hiHz, fs);
-  const afterHP = filtfilt(sig, hp.b, hp.a);
-  return filtfilt(afterHP, lp.b, lp.a);
+function bandpass(sig: number[], lo: number, hi: number, fs: number): number[] {
+  const hp = butter2HP(lo, fs), lp = butter2LP(hi, fs);
+  return filtfilt(filtfilt(sig, hp.b, hp.a), lp.b, lp.a);
 }
 
-// ─── Cooley–Tukey FFT ─────────────────────────────────────────────────────────
+// ─── FFT ──────────────────────────────────────────────────────────────────────
 function fftMag(sig: number[]): number[] {
-  const n = sig.length;
-  let sz = 1;
-  while (sz < n) sz <<= 1;
+  const n = sig.length; let sz = 1; while (sz < n) sz <<= 1;
   const re = new Float64Array(sz), im = new Float64Array(sz);
   for (let i = 0; i < n; i++) re[i] = sig[i];
   for (let i = 1, j = 0; i < sz; i++) {
-    let bit = sz >> 1;
-    for (; j & bit; bit >>= 1) j ^= bit;
-    j ^= bit;
+    let bit = sz >> 1; for (; j & bit; bit >>= 1) j ^= bit; j ^= bit;
     if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; }
   }
   for (let len = 2; len <= sz; len <<= 1) {
@@ -123,100 +102,74 @@ function fftMag(sig: number[]): number[] {
       }
     }
   }
-  const mags = new Array(sz >> 1);
-  for (let i = 0; i < sz >> 1; i++) mags[i] = Math.sqrt(re[i] ** 2 + im[i] ** 2);
-  return mags;
+  const m = new Array(sz >> 1);
+  for (let i = 0; i < sz >> 1; i++) m[i] = Math.sqrt(re[i] ** 2 + im[i] ** 2);
+  return m;
 }
 
-// ─── BPM estimator ────────────────────────────────────────────────────────────
-function estimateBPM(green: number[], fps: number): { bpm: number; snr: number } {
-  const n = green.length;
+// ─── BPM from filtered green signal ──────────────────────────────────────────
+function estimateBPM(sig: number[], fps: number): { bpm: number; snr: number } {
+  const n = sig.length;
   if (n < 60) return { bpm: 0, snr: 0 };
-  // Hann window
-  const w = green.map((v, i) => v * (0.5 - 0.5 * Math.cos(2 * Math.PI * i / (n - 1))));
-  // 4× zero-pad for finer frequency resolution
+  const w = sig.map((v, i) => v * (0.5 - 0.5 * Math.cos(2 * Math.PI * i / (n - 1))));
   const padded = [...w, ...new Array(n * 3).fill(0)];
-  const mags = fftMag(padded);
-  const freqRes = fps / padded.length;   // Hz / FFT bin
-  const minBin = Math.max(1, Math.floor(45  / 60 / freqRes));
-  const maxBin = Math.min(mags.length - 2, Math.ceil(180 / 60 / freqRes));
-  let peak = 0, peakBin = minBin, bandSum = 0;
-  for (let k = minBin; k <= maxBin; k++) {
-    bandSum += mags[k];
-    if (mags[k] > peak) { peak = mags[k]; peakBin = k; }
-  }
-  const bandMean = bandSum / Math.max(1, maxBin - minBin + 1);
-  const snr = bandMean > 0 ? peak / bandMean : 0;
-  // Parabolic interpolation for sub-bin resolution
-  let freq = peakBin * freqRes;
-  if (peakBin > 0 && peakBin < mags.length - 1) {
-    const al = mags[peakBin - 1], b = mags[peakBin], ar = mags[peakBin + 1];
-    const denom = al - 2 * b + ar;
-    if (Math.abs(denom) > 1e-12) freq = (peakBin + 0.5 * (al - ar) / denom) * freqRes;
+  const mags   = fftMag(padded);
+  const fr     = fps / padded.length;
+  const lo = Math.max(1, Math.floor(45  / 60 / fr));
+  const hi = Math.min(mags.length - 2, Math.ceil(180 / 60 / fr));
+  let peak = 0, pb = lo, bsum = 0;
+  for (let k = lo; k <= hi; k++) { bsum += mags[k]; if (mags[k] > peak) { peak = mags[k]; pb = k; } }
+  const bmean = bsum / Math.max(1, hi - lo + 1);
+  const snr   = bmean > 0 ? peak / bmean : 0;
+  let freq    = pb * fr;
+  if (pb > 0 && pb < mags.length - 1) {
+    const al = mags[pb - 1], b = mags[pb], ar = mags[pb + 1];
+    const d = al - 2 * b + ar;
+    if (Math.abs(d) > 1e-12) freq = (pb + 0.5 * (al - ar) / d) * fr;
   }
   return { bpm: Math.max(45, Math.min(180, Math.round(freq * 60))), snr };
 }
 
 // ─── Full pipeline ────────────────────────────────────────────────────────────
-function runPipeline(
-  raw: [number, number, number][],
-  fps: number
-): { signal: number[]; bpm: number; snr: number } {
-  if (raw.length < 60) return { signal: [], bpm: 0, snr: 0 };
-
-  // Green channel
-  const green = raw.map(v => v[1]);
-
-  // Step 1: linear detrend
-  const detrended = linearDetrend(green);
-
-  // Step 2: Butterworth bandpass 0.75–3.0 Hz (45–180 BPM), zero-phase
-  const filtered = bandpass(detrended, 0.75, 3.0, fps);
-
-  // Step 3: FFT → BPM
+function runPipeline(raw: [number, number, number][], fps: number) {
+  if (raw.length < 60) return { signal: [] as number[], bpm: 0, snr: 0 };
+  const green    = raw.map(v => v[1]);
+  const detrend  = linearDetrend(green);
+  const filtered = bandpass(detrend, 0.75, 3.0, fps);
   const { bpm, snr } = estimateBPM(filtered, fps);
-
-  // Normalize for display
   const s = std(filtered) || 1;
   return { signal: filtered.map(v => v / s), bpm, snr };
 }
 
-// ─── ROI candidate regions (fraction of frame) ────────────────────────────────
-// Format: [x0, y0, x1, y1]  (fractions of video width/height)
-const ROIS: [number, number, number, number][] = [
-  [0.20, 0.10, 0.80, 0.55],   // A — upper-centre  (forehead + cheeks)
-  [0.20, 0.30, 0.80, 0.75],   // B — mid-centre    (cheeks, nose)
-  [0.15, 0.10, 0.85, 0.80],   // C — full face
-  [0.25, 0.05, 0.75, 0.35],   // D — top-centre    (forehead)
-  [0.25, 0.40, 0.75, 0.80],   // E — lower face    (cheeks)
+// ─── ROI candidates (fallback when no face detected) ─────────────────────────
+const FALLBACK_ROIS: [number, number, number, number][] = [
+  [0.15, 0.08, 0.85, 0.60],
+  [0.20, 0.25, 0.80, 0.75],
+  [0.15, 0.08, 0.85, 0.82],
+  [0.25, 0.05, 0.75, 0.40],
 ];
-const ROI_LABELS = ["UPPER", "MID", "FULL", "TOP", "LOWER"];
+const ROI_LABELS = ["FOREHEAD", "CHEEKS", "FULL", "CROWN"];
 
-function sampleROI(
+function samplePixels(
   ctx: CanvasRenderingContext2D,
-  vw: number, vh: number,
-  roi: [number, number, number, number]
+  x: number, y: number, w: number, h: number
 ): { r: number; g: number; b: number; ok: boolean } {
-  const x = Math.floor(roi[0] * vw), y = Math.floor(roi[1] * vh);
-  const w = Math.max(1, Math.floor((roi[2] - roi[0]) * vw));
-  const h = Math.max(1, Math.floor((roi[3] - roi[1]) * vh));
+  const wi = Math.max(1, Math.floor(w)), hi = Math.max(1, Math.floor(h));
   let r = 0, g = 0, b = 0, cnt = 0;
   try {
-    const d = ctx.getImageData(x, y, w, h).data;
+    const d = ctx.getImageData(Math.floor(x), Math.floor(y), wi, hi).data;
     for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; cnt++; }
   } catch { return { r: 0, g: 0, b: 0, ok: false }; }
   if (!cnt) return { r: 0, g: 0, b: 0, ok: false };
   r /= cnt; g /= cnt; b /= cnt;
-  // Valid if pixels are neither black nor saturated white
-  const ok = r > 25 && g > 15 && b > 10 && r < 248 && g < 248 && b < 248;
-  return { r, g, b, ok };
+  return { r, g, b, ok: r > 20 && g > 15 && b > 8 && r < 248 && g < 248 && b < 248 };
 }
 
-// Skin score: green mean closest to 120 (typical lit skin green value)
-const skinScore = (g: number) => -Math.abs(g - 120);
-
 // ─── Hook ─────────────────────────────────────────────────────────────────────
-export function useHeartbeat(videoRef: React.RefObject<HTMLVideoElement | null>) {
+export function useHeartbeat(
+  videoRef: React.RefObject<HTMLVideoElement | null>,
+  faceBoxRef?: React.MutableRefObject<FaceBox | null>
+) {
   const cvRef     = useRef<HTMLCanvasElement | null>(null);
   const rafRef    = useRef<number>(0);
   const rawRef    = useRef<[number, number, number][]>([]);
@@ -225,11 +178,11 @@ export function useHeartbeat(videoRef: React.RefObject<HTMLVideoElement | null>)
   const calRef    = useRef<number>(0);
   const fpsRef    = useRef<number>(30);
   const prevMsRef = useRef<number>(0);
-  const roiRef    = useRef<number>(2);   // default to full-face ROI
+  const roiIdxRef = useRef<number>(2);
 
   const [data, setData] = useState<HeartbeatData>({
     bpm: null, confidence: 0, signal: [], isActive: false,
-    stress: "low", trend: "stable", algorithm: "G-rPPG (Butterworth)",
+    stress: "low", trend: "stable", algorithm: "G-rPPG",
     faceDetected: false, frameRate: 30, calibrating: true,
   });
 
@@ -237,7 +190,6 @@ export function useHeartbeat(videoRef: React.RefObject<HTMLVideoElement | null>)
     const video = videoRef.current;
     if (!video || !video.videoWidth) { rafRef.current = requestAnimationFrame(processFrame); return; }
 
-    // Track real FPS
     const now = performance.now();
     if (prevMsRef.current > 0) {
       const dt = (now - prevMsRef.current) / 1000;
@@ -247,9 +199,8 @@ export function useHeartbeat(videoRef: React.RefObject<HTMLVideoElement | null>)
     frameRef.current++;
     calRef.current++;
 
-    // Canvas init / resize
     if (!cvRef.current) cvRef.current = document.createElement("canvas");
-    const cv = cvRef.current;
+    const cv  = cvRef.current;
     const ctx = cv.getContext("2d", { willReadFrequently: true });
     if (!ctx) { rafRef.current = requestAnimationFrame(processFrame); return; }
     const vw = video.videoWidth, vh = video.videoHeight;
@@ -257,39 +208,54 @@ export function useHeartbeat(videoRef: React.RefObject<HTMLVideoElement | null>)
     if (cv.height !== vh) cv.height = vh;
     ctx.drawImage(video, 0, 0);
 
-    // ── Every 30 frames: re-evaluate all candidate ROIs ────────────────────
-    if (frameRef.current % 30 === 1) {
-      let bestScore = -Infinity, best = 2;
-      for (let i = 0; i < ROIS.length; i++) {
-        const { g, ok } = sampleROI(ctx, vw, vh, ROIS[i]);
-        if (ok) { const s = skinScore(g); if (s > bestScore) { bestScore = s; best = i; } }
+    // ── Determine ROI ──────────────────────────────────────────────────────
+    let roiResult: { r: number; g: number; b: number; ok: boolean };
+    let roiLabel = "FACE";
+
+    const box = faceBoxRef?.current;
+    if (box && box.w > 20 && box.h > 20) {
+      // Use top-30% of detected face (forehead ROI) — exact like reference video
+      const rx = box.x + box.w * 0.15;
+      const ry = box.y + box.h * 0.05;
+      const rw = box.w * 0.70;
+      const rh = box.h * 0.35;
+      roiResult = samplePixels(ctx, rx, ry, rw, rh);
+      roiLabel  = "FACE-ROI";
+    } else {
+      // Fallback: rotate through candidates every 30 frames
+      if (frameRef.current % 30 === 1) {
+        let best = -Infinity, bestI = 2;
+        for (let i = 0; i < FALLBACK_ROIS.length; i++) {
+          const [fx, fy, fw, fh] = FALLBACK_ROIS[i];
+          const s = samplePixels(ctx, fx * vw, fy * vh, (fw - fx) * vw, (fh - fy) * vh);
+          if (s.ok) { const sc = -Math.abs(s.g - 120); if (sc > best) { best = sc; bestI = i; } }
+        }
+        roiIdxRef.current = bestI;
       }
-      roiRef.current = best;
+      const [fx, fy, fw, fh] = FALLBACK_ROIS[roiIdxRef.current];
+      roiResult = samplePixels(ctx, fx * vw, fy * vh, (fw - fx) * vw, (fh - fy) * vh);
+      roiLabel  = ROI_LABELS[roiIdxRef.current];
     }
 
-    // ── Sample selected ROI ──────────────────────────────────────────────────
-    const { r, g, b, ok } = sampleROI(ctx, vw, vh, ROIS[roiRef.current]);
-    if (ok) {
-      rawRef.current.push([r, g, b]);
-      const maxN = Math.round(fpsRef.current * 12);   // 12-second rolling window
+    if (roiResult.ok) {
+      rawRef.current.push([roiResult.r, roiResult.g, roiResult.b]);
+      const maxN = Math.round(fpsRef.current * 12);
       if (rawRef.current.length > maxN) rawRef.current.shift();
     }
 
-    // ── Run pipeline every 10 frames once we have ≥ 10 s of data ───────────
-    const MIN_S = Math.round(fpsRef.current * 10);   // need 10 s
-    const CAL_F = 150;                                 // 5 s calibration display
+    // ── Run pipeline every 10 frames ─────────────────────────────────────
+    const MIN_S = Math.round(fpsRef.current * 10);
+    const CAL_F = 120;
 
     if (frameRef.current % 10 === 0 && rawRef.current.length >= MIN_S) {
       const fps = Math.min(60, Math.max(15, fpsRef.current));
       const { signal, bpm, snr } = runPipeline(rawRef.current.slice(), fps);
+      const SNR_MIN   = 2.0;
+      const isCal     = calRef.current < CAL_F;
 
-      const SNR_MIN = 2.0;
-      const isCalibrating = calRef.current < CAL_F;
-
-      if (!isCalibrating && snr >= SNR_MIN && bpm >= 45 && bpm <= 180) {
+      if (!isCal && snr >= SNR_MIN && bpm >= 45 && bpm <= 180) {
         const prev = bpmRef.current ?? bpm;
         if (Math.abs(bpm - prev) <= 22 || bpmRef.current === null) {
-          // Higher SNR → faster adaptation
           const alpha = snr >= 5 ? 0.40 : 0.22;
           bpmRef.current = Math.max(45, Math.min(180, Math.round(prev * (1 - alpha) + bpm * alpha)));
         }
@@ -298,38 +264,37 @@ export function useHeartbeat(videoRef: React.RefObject<HTMLVideoElement | null>)
       const finalBpm = bpmRef.current;
       const stress: "low" | "medium" | "high" =
         finalBpm != null ? (finalBpm > 100 ? "high" : finalBpm > 83 ? "medium" : "low") : "low";
-      const isCal = isCalibrating || finalBpm === null;
-      const conf = snr >= SNR_MIN ? Math.min(95, Math.round(((snr - SNR_MIN) / 4) * 95)) : 0;
+      const calState = isCal || finalBpm === null;
 
       setData(prev => ({
-        bpm: isCal ? null : finalBpm,
-        confidence: conf,
-        signal: signal.slice(-80),
-        isActive: true,
+        bpm:         calState ? null : finalBpm,
+        confidence:  snr >= SNR_MIN ? Math.min(95, Math.round(((snr - SNR_MIN) / 4) * 95)) : 0,
+        signal:      signal.slice(-80),
+        isActive:    true,
         stress,
-        trend: (finalBpm != null && prev.bpm != null)
-          ? (finalBpm > prev.bpm + 3 ? "rising" : finalBpm < prev.bpm - 3 ? "falling" : "stable")
-          : "stable",
-        algorithm: "G-rPPG (Butterworth)",
-        faceDetected: ok,
-        frameRate: Math.round(fps),
-        calibrating: isCal,
-        roiDebug: ROI_LABELS[roiRef.current],
+        trend:       (finalBpm != null && prev.bpm != null)
+                       ? (finalBpm > prev.bpm + 3 ? "rising" : finalBpm < prev.bpm - 3 ? "falling" : "stable")
+                       : "stable",
+        algorithm:   box ? "Face-rPPG" : "G-rPPG",
+        faceDetected: roiResult.ok,
+        frameRate:   Math.round(fps),
+        calibrating: calState,
+        roiDebug:    roiLabel,
       }));
 
     } else if (frameRef.current % 30 === 0) {
       setData(prev => ({
         ...prev,
-        isActive: true,
-        faceDetected: ok,
-        frameRate: Math.round(fpsRef.current),
+        isActive:    true,
+        faceDetected: roiResult.ok,
+        frameRate:   Math.round(fpsRef.current),
         calibrating: bpmRef.current === null,
-        roiDebug: ROI_LABELS[roiRef.current],
+        roiDebug:    roiLabel,
       }));
     }
 
     rafRef.current = requestAnimationFrame(processFrame);
-  }, [videoRef]);
+  }, [videoRef, faceBoxRef]);
 
   const start = useCallback(() => {
     rawRef.current = [];
@@ -338,7 +303,7 @@ export function useHeartbeat(videoRef: React.RefObject<HTMLVideoElement | null>)
     bpmRef.current = null;
     fpsRef.current = 30;
     prevMsRef.current = 0;
-    roiRef.current = 2;
+    roiIdxRef.current = 2;
     rafRef.current = requestAnimationFrame(processFrame);
   }, [processFrame]);
 
@@ -349,7 +314,6 @@ export function useHeartbeat(videoRef: React.RefObject<HTMLVideoElement | null>)
 
   useEffect(() => () => cancelAnimationFrame(rafRef.current), []);
 
-  // Demo mode: bypass algorithm for presentations
   const panic = useCallback(() => {
     bpmRef.current = 116 + Math.floor(Math.random() * 18);
     calRef.current = 999;

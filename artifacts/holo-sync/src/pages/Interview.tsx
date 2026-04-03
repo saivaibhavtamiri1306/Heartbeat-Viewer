@@ -6,7 +6,9 @@ import InterviewChat, { ChatMessage } from "../components/InterviewChat";
 import StudentAnalytics from "../components/StudentAnalytics";
 import { useWebcam } from "../hooks/useWebcam";
 import { useHeartbeat } from "../hooks/useHeartbeat";
+import { useFaceDetection } from "../hooks/useFaceDetection";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
+import type { FaceBox } from "../hooks/useFaceDetection";
 import {
   QUESTIONS,
   EMPATHY_RESPONSES,
@@ -25,8 +27,13 @@ type AvatarEmotion = "neutral" | "empathetic" | "stern" | "curious" | "stressed"
 
 export default function Interview({ domain, onEnd }: InterviewProps) {
   const { videoRef, isActive: camActive, error: camError, startWebcam, stopWebcam } = useWebcam();
-  const { data: heartData, start: startHeartbeat, stop: stopHeartbeat, panic, calm } = useHeartbeat(videoRef);
+  const faceBoxRef = useRef<FaceBox | null>(null);
+  const { data: heartData, start: startHeartbeat, stop: stopHeartbeat, panic, calm } = useHeartbeat(videoRef, faceBoxRef);
+  const face = useFaceDetection(videoRef);
   const { data: speech, startListening, stopListening, clearCurrentAnswer } = useSpeechRecognition();
+
+  // Keep faceBoxRef in sync with latest detected face box
+  useEffect(() => { faceBoxRef.current = face.box ?? null; }, [face.box]);
 
   const [phase, setPhase] = useState<Phase>("starting");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -292,8 +299,14 @@ export default function Interview({ domain, onEnd }: InterviewProps) {
             videoRef={videoRef}
             isActive={camActive}
             compact
-            faceDetected={heartData.faceDetected}
-            roiLabel={heartData.roiDebug}
+            faceDetected={face.detected}
+            faceBox={face.box}
+            keypoints={face.keypoints}
+            videoW={face.videoW}
+            videoH={face.videoH}
+            bpm={heartData.bpm}
+            calibrating={heartData.calibrating}
+            faceLoading={face.loading}
           />
 
           {camError && (
