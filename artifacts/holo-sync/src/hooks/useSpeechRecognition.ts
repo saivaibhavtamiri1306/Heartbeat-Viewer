@@ -5,15 +5,15 @@ export interface SpeechAnalytics {
   fillerCount: number;
   fillerWords: string[];
   wordCount: number;
-  vocabularyScore: number;  // 0-100 unique word ratio
-  confidenceScore: number;  // 0-100 derived from WPM + filler rate
-  transcript: string;       // full session transcript
+  vocabularyScore: number;
+  confidenceScore: number;
+  transcript: string;
 }
 
 export interface SpeechRecognitionData {
   isListening: boolean;
-  interimText: string;       // live partial text (not final)
-  finalText: string;         // last confirmed answer
+  interimText: string;
+  finalText: string;
   analytics: SpeechAnalytics;
   error: string | null;
   supported: boolean;
@@ -30,7 +30,6 @@ function analyzeText(text: string): Pick<SpeechAnalytics, "wpm" | "fillerCount" 
   const words = lower.split(/\s+/).filter(w => w.length > 0);
   const wordCount = words.length;
 
-  // Filler detection
   const foundFillers: string[] = [];
   let fillerCount = 0;
   for (const filler of FILLER_WORDS) {
@@ -42,17 +41,14 @@ function analyzeText(text: string): Pick<SpeechAnalytics, "wpm" | "fillerCount" 
     }
   }
 
-  // Vocabulary richness = unique words / total words (excluding fillers & short words)
   const meaningfulWords = words.filter(w => w.length > 3 && !FILLER_WORDS.includes(w));
   const uniqueWords = new Set(meaningfulWords);
   const vocabularyScore = meaningfulWords.length > 0
     ? Math.min(100, Math.round((uniqueWords.size / meaningfulWords.length) * 100))
     : 0;
 
-  // WPM — approximate (assume answers spoken at ~1.2x typing speed, ~3 chars/word)
   const avgWPM = wordCount > 0 ? Math.min(180, Math.max(60, Math.round(wordCount * 12))) : 0;
 
-  // Confidence: penalize high filler rate, reward good WPM & vocab
   const fillerRate = wordCount > 0 ? fillerCount / wordCount : 0;
   const confidenceScore = Math.min(100, Math.max(0,
     Math.round(
@@ -72,11 +68,20 @@ function analyzeText(text: string): Pick<SpeechAnalytics, "wpm" | "fillerCount" 
   };
 }
 
-// Extend window type for SpeechRecognition
 declare global {
   interface Window {
     SpeechRecognition: typeof SpeechRecognition;
     webkitSpeechRecognition: typeof SpeechRecognition;
+  }
+}
+
+async function requestMicPermission(): Promise<boolean> {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach(track => track.stop());
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -98,14 +103,37 @@ export function useSpeechRecognition() {
   });
 
   const onResultRef = useRef<((text: string) => void) | null>(null);
+  const micPermissionGrantedRef = useRef(false);
+  const restartingRef = useRef(false);
 
   const supported = !!(
     typeof window !== "undefined" &&
     (window.SpeechRecognition || window.webkitSpeechRecognition)
   );
 
-  const startListening = useCallback((onResult?: (finalText: string) => void) => {
-    if (!supported) return;
+  const startListening = useCallback(async (onResult?: (finalText: string) => void) => {
+    if (!supported) {
+      setData(prev => ({
+        ...prev,
+        error: "Speech recognition not supported — use Chrome or Edge",
+        supported: false,
+      }));
+      return;
+    }
+
+    if (!micPermissionGrantedRef.current) {
+      const granted = await requestMicPermission();
+      if (!granted) {
+        setData(prev => ({
+          ...prev,
+          error: "Microphone access denied — please allow mic permission and try again",
+          isListening: false,
+        }));
+        return;
+      }
+      micPermissionGrantedRef.current = true;
+    }
+
     const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (recognitionRef.current) {
       try { recognitionRef.current.stop(); } catch {}
@@ -144,20 +172,47 @@ export function useSpeechRecognition() {
         interimText: interim,
         finalText: fullTranscriptRef.current.trim(),
         analytics: { ...stats, transcript: sessionTranscriptRef.current },
+        error: null,
       }));
     };
 
     rec.onerror = (event: SpeechRecognitionErrorEvent) => {
       const err = event.error;
+      if (err === "not-allowed") {
+        setData(prev => ({
+          ...prev,
+          error: "Microphone blocked — check browser permissions",
+          isListening: false,
+        }));
+        recognitionRef.current = null;
+        return;
+      }
+      if (err === "network") {
+        setData(prev => ({
+          ...prev,
+          error: "Speech recognition needs internet connection",
+          isListening: false,
+        }));
+        return;
+      }
       if (err !== "aborted" && err !== "no-speech") {
-        setData(prev => ({ ...prev, error: err, isListening: false }));
+        setData(prev => ({ ...prev, error: `Mic error: ${err}` }));
       }
     };
 
     rec.onend = () => {
-      // Auto-restart if still supposed to be listening
-      if (recognitionRef.current === rec) {
-        try { rec.start(); } catch {}
+      if (recognitionRef.current === rec && !restartingRef.current) {
+        restartingRef.current = true;
+        try {
+          setTimeout(() => {
+            if (recognitionRef.current === rec) {
+              try { rec.start(); } catch {}
+            }
+            restartingRef.current = false;
+          }, 100);
+        } catch {
+          restartingRef.current = false;
+        }
       }
     };
 
@@ -165,17 +220,23 @@ export function useSpeechRecognition() {
       setData(prev => ({ ...prev, isListening: true, error: null }));
     };
 
+    rec.onaudiostart = () => {
+      setData(prev => ({ ...prev, isListening: true, error: null }));
+    };
+
     try {
       rec.start();
-    } catch (e) {
-      setData(prev => ({ ...prev, error: "Could not start microphone", isListening: false }));
+    } catch (e: unknown) {
+      const errMsg = e instanceof Error ? e.message : "Could not start microphone";
+      setData(prev => ({ ...prev, error: errMsg, isListening: false }));
     }
   }, [supported]);
 
   const stopListening = useCallback(() => {
     if (recognitionRef.current) {
       const rec = recognitionRef.current;
-      recognitionRef.current = null; // prevent auto-restart
+      recognitionRef.current = null;
+      restartingRef.current = false;
       try { rec.stop(); } catch {}
     }
     setData(prev => ({ ...prev, isListening: false, interimText: "" }));
@@ -192,7 +253,6 @@ export function useSpeechRecognition() {
     }));
   }, []);
 
-  // Clear per-answer (keep session stats)
   const clearCurrentAnswer = useCallback(() => {
     fullTranscriptRef.current = "";
     setData(prev => ({ ...prev, finalText: "", interimText: "" }));
@@ -202,6 +262,7 @@ export function useSpeechRecognition() {
     if (recognitionRef.current) {
       const rec = recognitionRef.current;
       recognitionRef.current = null;
+      restartingRef.current = false;
       try { rec.stop(); } catch {}
     }
   }, []);

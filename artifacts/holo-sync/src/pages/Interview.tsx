@@ -103,10 +103,14 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
       ? PANEL_AVATARS[domain.id as keyof typeof PANEL_AVATARS] || PANEL_AVATARS.upsc
       : undefined;
 
-  // Sync mic interim speech → input field
+  useEffect(() => {
+    if (micOn && speech.error) {
+      setMicOn(false);
+    }
+  }, [speech.error, micOn]);
+
   useEffect(() => {
     if (!micOn) return;
-    // Show interim as live preview while still speaking
     if (speech.interimText) {
       setUserInput(speech.finalText + " " + speech.interimText);
     } else if (speech.finalText) {
@@ -114,14 +118,14 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
     }
   }, [speech.interimText, speech.finalText, micOn]);
 
-  const toggleMic = useCallback(() => {
+  const toggleMic = useCallback(async () => {
     if (micOn) {
       stopListening();
       setMicOn(false);
     } else {
       clearCurrentAnswer();
       setUserInput("");
-      startListening();
+      await startListening();
       setMicOn(true);
       inputRef.current?.focus();
     }
@@ -771,35 +775,33 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
 
             <div className="flex gap-2">
               {/* Mic toggle button */}
-              {speech.supported && (
-                <button
-                  onClick={toggleMic}
-                  disabled={phase === "ended" || phase === "starting" || isSpeaking}
-                  title={micOn ? "Stop microphone" : "Start microphone"}
-                  className={`relative shrink-0 w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-200 disabled:opacity-40 ${
-                    micOn
-                      ? "bg-red-500/20 border-2 border-red-500 shadow-[0_0_20px_rgba(255,68,68,0.4)]"
-                      : "bg-cyan-500/10 border border-cyan-500/40 hover:bg-cyan-500/20"
-                  }`}
-                >
-                  {micOn && (
-                    <div className="absolute inset-0 rounded-xl border-2 border-red-500 animate-ping opacity-40" />
+              <button
+                onClick={toggleMic}
+                disabled={phase === "ended" || phase === "starting" || isSpeaking}
+                title={micOn ? "Stop microphone" : "Start microphone"}
+                className={`relative shrink-0 w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-200 disabled:opacity-40 ${
+                  micOn
+                    ? "bg-red-500/20 border-2 border-red-500 shadow-[0_0_20px_rgba(255,68,68,0.4)]"
+                    : "bg-cyan-500/10 border border-cyan-500/40 hover:bg-cyan-500/20"
+                }`}
+              >
+                {micOn && (
+                  <div className="absolute inset-0 rounded-xl border-2 border-red-500 animate-ping opacity-40" />
+                )}
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <rect x="9" y="2" width="6" height="12" rx="3"
+                    fill={micOn ? "#ff4444" : "#00d4ff"} />
+                  <path d="M5 10c0 3.866 3.134 7 7 7s7-3.134 7-7"
+                    stroke={micOn ? "#ff4444" : "#00d4ff"} strokeWidth="2" strokeLinecap="round" />
+                  <line x1="12" y1="17" x2="12" y2="22"
+                    stroke={micOn ? "#ff4444" : "#00d4ff"} strokeWidth="2" strokeLinecap="round" />
+                  <line x1="9" y1="22" x2="15" y2="22"
+                    stroke={micOn ? "#ff4444" : "#00d4ff"} strokeWidth="2" strokeLinecap="round" />
+                  {!micOn && (
+                    <line x1="4" y1="4" x2="20" y2="20" stroke="#00d4ff" strokeWidth="2" strokeLinecap="round" opacity="0.5" />
                   )}
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                    <rect x="9" y="2" width="6" height="12" rx="3"
-                      fill={micOn ? "#ff4444" : "#00d4ff"} />
-                    <path d="M5 10c0 3.866 3.134 7 7 7s7-3.134 7-7"
-                      stroke={micOn ? "#ff4444" : "#00d4ff"} strokeWidth="2" strokeLinecap="round" />
-                    <line x1="12" y1="17" x2="12" y2="22"
-                      stroke={micOn ? "#ff4444" : "#00d4ff"} strokeWidth="2" strokeLinecap="round" />
-                    <line x1="9" y1="22" x2="15" y2="22"
-                      stroke={micOn ? "#ff4444" : "#00d4ff"} strokeWidth="2" strokeLinecap="round" />
-                    {!micOn && (
-                      <line x1="4" y1="4" x2="20" y2="20" stroke="#00d4ff" strokeWidth="2" strokeLinecap="round" opacity="0.5" />
-                    )}
-                  </svg>
-                </button>
-              )}
+                </svg>
+              </button>
 
               {/* Text input */}
               <div className="flex-1 relative">
@@ -846,9 +848,14 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
               </button>
             </div>
 
-            {!speech.supported && (
+            {speech.error && (
+              <div className="mt-1.5 text-xs font-mono text-red-400/80 text-center animate-pulse">
+                ⚠ {speech.error}
+              </div>
+            )}
+            {!speech.supported && !speech.error && (
               <div className="mt-1.5 text-xs font-mono text-yellow-500/60 text-center">
-                ⚠ Speech recognition not supported in this browser — please use Chrome or Edge
+                ⚠ Speech recognition not supported — use Chrome or Edge, or type your answers
               </div>
             )}
           </div>
