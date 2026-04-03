@@ -7,7 +7,6 @@ interface WebcamFeedProps {
   compact?: boolean;
   faceDetected?: boolean;
   faceBox?: FaceBox | null;
-  foreheadBox?: FaceBox | null;
   keypoints?: FaceKeypoint[];
   videoW?: number;
   videoH?: number;
@@ -18,7 +17,7 @@ interface WebcamFeedProps {
 
 export default function WebcamFeed({
   videoRef, isActive, compact,
-  faceDetected, faceBox, foreheadBox, keypoints = [], videoW = 0, videoH = 0,
+  faceDetected, faceBox, keypoints = [], videoW = 0, videoH = 0,
   bpm, calibrating, faceLoading,
 }: WebcamFeedProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -121,47 +120,6 @@ export default function WebcamFeed({
       ctx.restore();
     });
 
-    // ── Forehead ROI box (rPPG sampling region) ───────────────────────────────
-    if (foreheadBox) {
-      const fhX = foreheadBox.x * scaleToFill + offX;
-      const fhY = foreheadBox.y * scaleToFill + offY;
-      const fhW = foreheadBox.w * scaleToFill;
-      const fhH = foreheadBox.h * scaleToFill;
-      // Mirror x like the face box
-      const rhX = dw - fhX - fhW;
-      const roiColor = "#00ff88";
-
-      // Dashed green fill tint
-      ctx.save();
-      ctx.fillStyle = "rgba(0,255,136,0.08)";
-      ctx.fillRect(rhX, fhY, fhW, fhH);
-      ctx.restore();
-
-      // Solid glowing border
-      ctx.save();
-      ctx.strokeStyle = roiColor;
-      ctx.lineWidth   = 1.5;
-      ctx.shadowColor = roiColor;
-      ctx.shadowBlur  = 10;
-      ctx.setLineDash([4, 3]);
-      ctx.strokeRect(rhX, fhY, fhW, fhH);
-      ctx.restore();
-
-      // "PPG ROI" label — top-left of the forehead box
-      const roiFs = Math.max(7, Math.min(10, Math.round(fhW * 0.18)));
-      ctx.save();
-      ctx.font        = `bold ${roiFs}px 'Orbitron', monospace`;
-      ctx.textAlign   = "left";
-      ctx.fillStyle   = "rgba(0,0,0,0.6)";
-      const lblW      = ctx.measureText("PPG ROI").width + 8;
-      ctx.fillRect(rhX, fhY - roiFs - 4, lblW, roiFs + 4);
-      ctx.fillStyle   = roiColor;
-      ctx.shadowColor = roiColor;
-      ctx.shadowBlur  = 6;
-      ctx.fillText("PPG ROI", rhX + 4, fhY - 3);
-      ctx.restore();
-    }
-
     // ── BPM readout (above face box) ──────────────────────────────────────────
     const bpmTxt   = calibrating ? "● CALIBRATING" : bpm != null ? `♥  ${bpm} BPM` : "● READING";
     const bpmColor = (bpm != null && !calibrating)
@@ -197,7 +155,7 @@ export default function WebcamFeed({
     ctx.fillText(lockTxt, bx + bw, by + bh + lockSize + 3);
     ctx.restore();
 
-  }, [faceBox, foreheadBox, keypoints, videoW, videoH, bpm, calibrating, faceDetected, isActive]);
+  }, [faceBox, keypoints, videoW, videoH, bpm, calibrating, faceDetected, isActive]);
 
   return (
     <div
