@@ -14,6 +14,7 @@ export interface SpeechRecognitionData {
   isListening: boolean;
   interimText: string;
   finalText: string;
+  audioLevel: number;
   analytics: SpeechAnalytics;
   error: string | null;
   supported: boolean;
@@ -104,11 +105,15 @@ export function useSpeechRecognition() {
   const cycleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const mimeTypeRef = useRef<string>("audio/webm");
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const levelIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [data, setData] = useState<SpeechRecognitionData>({
     isListening: false,
     interimText: "",
     finalText: "",
+    audioLevel: 0,
     analytics: {
       wpm: 0, fillerCount: 0, fillerWords: [],
       wordCount: 0, vocabularyScore: 0, confidenceScore: 0, transcript: "",
@@ -120,12 +125,17 @@ export function useSpeechRecognition() {
   const onResultRef = useRef<((text: string) => void) | null>(null);
 
   const handleTranscription = useCallback(async (blob: Blob) => {
-    if (blob.size < 1000 || processingRef.current) return;
+    if (processingRef.current) return;
+    if (blob.size < 500) {
+      console.log(`[Speech] Skipped tiny blob: ${blob.size} bytes`);
+      return;
+    }
     processingRef.current = true;
-    setData(prev => ({ ...prev, interimText: "Transcribing..." }));
+    console.log(`[Speech] Sending ${blob.size} bytes (${blob.type}) for transcription`);
 
     try {
       const text = await transcribeAudio(blob);
+      console.log(`[Speech] Got back: "${text}"`);
       if (text && text.trim()) {
         const cleaned = text.trim();
         fullTranscriptRef.current += (fullTranscriptRef.current ? " " : "") + cleaned;
@@ -144,12 +154,9 @@ export function useSpeechRecognition() {
           analytics: { ...stats, transcript: sessionTranscriptRef.current },
           error: null,
         }));
-      } else {
-        setData(prev => ({ ...prev, interimText: "" }));
       }
     } catch (err: unknown) {
       console.error("Transcription error:", err);
-      setData(prev => ({ ...prev, interimText: "" }));
     }
     processingRef.current = false;
   }, []);
@@ -200,11 +207,32 @@ export function useSpeechRecognition() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: true,
+          sampleRate: 16000,
         }
       });
       streamRef.current = stream;
+
+      const actx = new AudioContext();
+      const source = actx.createMediaStreamSource(stream);
+      const analyser = actx.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+      audioCtxRef.current = actx;
+      analyserRef.current = analyser;
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      levelIntervalRef.current = setInterval(() => {
+        if (!analyserRef.current) return;
+        analyserRef.current.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+        const avg = sum / dataArray.length;
+        const level = Math.min(100, Math.round((avg / 128) * 100));
+        setData(prev => ({ ...prev, audioLevel: level }));
+      }, 200);
 
       if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
         mimeTypeRef.current = "audio/webm;codecs=opus";
@@ -216,8 +244,10 @@ export function useSpeechRecognition() {
         mimeTypeRef.current = "audio/webm";
       }
 
+      console.log(`[Speech] Mic started, format: ${mimeTypeRef.current}, tracks:`, stream.getAudioTracks().map(t => ({ label: t.label, enabled: t.enabled, muted: t.muted })));
+
       isActiveRef.current = true;
-      setData(prev => ({ ...prev, isListening: true, error: null }));
+      setData(prev => ({ ...prev, isListening: true, error: null, audioLevel: 0 }));
 
       startNewRecording();
 
@@ -248,12 +278,23 @@ export function useSpeechRecognition() {
 
     await new Promise(r => setTimeout(r, 200));
 
+    if (levelIntervalRef.current) {
+      clearInterval(levelIntervalRef.current);
+      levelIntervalRef.current = null;
+    }
+
+    if (audioCtxRef.current) {
+      audioCtxRef.current.close().catch(() => {});
+      audioCtxRef.current = null;
+      analyserRef.current = null;
+    }
+
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
     }
 
-    setData(prev => ({ ...prev, isListening: false, interimText: "" }));
+    setData(prev => ({ ...prev, isListening: false, interimText: "", audioLevel: 0 }));
   }, []);
 
   const clearTranscript = useCallback(() => {
@@ -275,8 +316,12 @@ export function useSpeechRecognition() {
   useEffect(() => () => {
     isActiveRef.current = false;
     if (cycleTimerRef.current) clearTimeout(cycleTimerRef.current);
+    if (levelIntervalRef.current) clearInterval(levelIntervalRef.current);
     if (recorderRef.current?.state === "recording") {
       try { recorderRef.current.stop(); } catch {}
+    }
+    if (audioCtxRef.current) {
+      audioCtxRef.current.close().catch(() => {});
     }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());

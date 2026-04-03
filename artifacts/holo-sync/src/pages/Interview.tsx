@@ -111,12 +111,10 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
 
   useEffect(() => {
     if (!micOn) return;
-    if (speech.interimText) {
-      setUserInput(speech.finalText + " " + speech.interimText);
-    } else if (speech.finalText) {
+    if (speech.finalText) {
       setUserInput(speech.finalText);
     }
-  }, [speech.interimText, speech.finalText, micOn]);
+  }, [speech.finalText, micOn]);
 
   const toggleMic = useCallback(async () => {
     if (micOn) {
@@ -758,18 +756,30 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
 
           {/* ── Input Bar ─────────────────────────────────────────── */}
           <div className="shrink-0 p-3 border-t border-cyan-500/20 bg-black/60">
-            {/* Mic live indicator */}
+            {/* Mic live indicator with level meter */}
             {micOn && (
               <div className="flex items-center gap-2 mb-2 px-1">
                 <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
                 <span className="text-xs font-mono text-red-400 uppercase tracking-widest">
-                  Mic Active — Speak your answer
+                  Recording
                 </span>
-                {speech.interimText && (
-                  <span className="text-xs font-mono text-cyan-400/60 italic truncate ml-1">
-                    "{speech.interimText.slice(0, 40)}{speech.interimText.length > 40 ? "…" : ""}"
-                  </span>
-                )}
+                <div className="flex items-center gap-1 ml-1">
+                  {[...Array(10)].map((_, i) => (
+                    <div
+                      key={i}
+                      className="w-1 rounded-full transition-all duration-100"
+                      style={{
+                        height: `${6 + i * 1.5}px`,
+                        backgroundColor: i < Math.floor(speech.audioLevel / 10)
+                          ? (i < 6 ? "#00d4ff" : i < 8 ? "#ffaa00" : "#ff4444")
+                          : "rgba(0,212,255,0.15)",
+                      }}
+                    />
+                  ))}
+                </div>
+                <span className="text-[10px] font-mono text-cyan-500/50 ml-1">
+                  {speech.audioLevel > 5 ? "Hearing you" : "No audio detected"}
+                </span>
               </div>
             )}
 
@@ -824,12 +834,7 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
                     boxShadow: micOn ? "0 0 0 1px rgba(255,68,68,0.3) inset" : undefined,
                   }}
                 />
-                {/* Interim speech ghost text overlay */}
-                {micOn && speech.interimText && !userInput && (
-                  <div className="absolute inset-0 px-4 py-3 text-sm font-mono text-cyan-400/40 pointer-events-none flex items-center">
-                    <span className="italic truncate">{speech.interimText}</span>
-                  </div>
-                )}
+                
               </div>
 
               {/* Send button */}

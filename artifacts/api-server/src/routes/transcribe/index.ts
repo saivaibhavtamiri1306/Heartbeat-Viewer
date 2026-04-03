@@ -38,8 +38,11 @@ router.post("/transcribe", async (req, res) => {
     const format = (detected === "wav" || detected === "mp3") ? detected : "webm";
 
     const text = await speechToText(audioBuffer, format as "wav" | "mp3" | "webm");
+    const trimmed = (text || "").trim();
 
-    res.json({ text: (text || "").trim() });
+    console.log(`Transcribed (${audioBuffer.length} bytes, ${format}): "${trimmed.slice(0, 100)}"`);
+
+    res.json({ text: trimmed });
   } catch (err: any) {
     const msg = err?.message || String(err);
     console.error("Transcribe error:", msg);
