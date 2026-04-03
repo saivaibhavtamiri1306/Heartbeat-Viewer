@@ -1,11 +1,10 @@
 /**
- * useFaceDetection — face tracking using the browser's built-in FaceDetector API.
+ * useFaceDetection — face tracking
  *
- * Tier 1: window.FaceDetector (Chrome native, zero CDN, instant load)
- * Tier 2: Skin-colour blob detector on a 160×120 downsampled canvas (fallback)
- *
- * Returns face bounding box + eye keypoints in original video pixel coords.
- * The webcam video has CSS scaleX(-1) applied, so the caller must mirror coords.
+ * Tier 1: window.FaceDetector (Chrome native, zero CDN)
+ * Tier 2: YCbCr skin BFS — finds the largest CONTIGUOUS skin blob in the
+ *         central face region (not all skin in frame), constrained to
+ *         face-shaped proportions. Gives a tight, face-sized box.
  */
 import { useRef, useState, useEffect, useCallback } from "react";
 
@@ -21,69 +20,120 @@ export interface FaceDetectionData {
   videoH: number;
 }
 
-// ─── Tier 2: fast skin-colour blob detector ──────────────────────────────────
-// Runs on a 160×120 downsampled canvas — cheap enough to run every frame.
-const DS_W = 160, DS_H = 120;
+// ── Downsampled resolution for fast processing ────────────────────────────────
+const DS_W = 80, DS_H = 60;
 
+// ── YCbCr skin check (robust across skin tones & lighting) ───────────────────
 function isSkin(r: number, g: number, b: number): boolean {
-  // YCbCr skin rule (standard for all lighting & skin tones)
   const Y  =  0.299  * r + 0.587  * g + 0.114  * b;
   const Cb = -0.1687 * r - 0.3313 * g + 0.5    * b + 128;
   const Cr =  0.5    * r - 0.4187 * g - 0.0813 * b + 128;
-  return (
-    Y  > 40 && Y  < 235 &&
-    Cb > 85 && Cb < 135 &&
-    Cr > 135 && Cr < 180
-  );
+  return Y > 35 && Y < 240 && Cb > 83 && Cb < 138 && Cr > 133 && Cr < 183;
 }
 
-function skinBlobDetect(
-  ctx: CanvasRenderingContext2D,
-  vw: number, vh: number
-): FaceBox | null {
-  const dsCtx = skinBlobDetect._dsCtx;
-  const dsCV  = skinBlobDetect._dsCv;
-  if (!dsCtx || !dsCV) return null;
+// ── BFS connected-component: finds the largest skin blob near the frame center ─
+function findFaceBlob(
+  mask: Uint8Array,   // DS_W × DS_H skin mask (1 = skin, 0 = not)
+): { minX: number; minY: number; maxX: number; maxY: number; size: number } | null {
+  const visited = new Uint8Array(DS_W * DS_H);
+  let bestBlob: { minX: number; minY: number; maxX: number; maxY: number; size: number } | null = null;
 
-  dsCV.width = DS_W; dsCV.height = DS_H;
-  dsCtx.drawImage(ctx.canvas, 0, 0, vw, vh, 0, 0, DS_W, DS_H);
-  const px = dsCtx.getImageData(0, 0, DS_W, DS_H).data;
+  // Only seed BFS from the CENTRAL face zone:
+  //   x: 20-80%, y: 5-75% of downsampled frame
+  const x0 = Math.floor(DS_W * 0.20), x1 = Math.floor(DS_W * 0.80);
+  const y0 = Math.floor(DS_H * 0.05), y1 = Math.floor(DS_H * 0.75);
 
-  let minX = DS_W, maxX = 0, minY = DS_H, maxY = 0, cnt = 0;
-  for (let py = 0; py < DS_H; py++) {
-    for (let px2 = 0; px2 < DS_W; px2++) {
-      const i = (py * DS_W + px2) * 4;
-      if (isSkin(px[i], px[i + 1], px[i + 2])) {
-        if (px2 < minX) minX = px2;
-        if (px2 > maxX) maxX = px2;
-        if (py  < minY) minY = py;
-        if (py  > maxY) maxY = py;
-        cnt++;
+  const queue: number[] = [];
+
+  for (let sy = y0; sy < y1; sy++) {
+    for (let sx = x0; sx < x1; sx++) {
+      const idx = sy * DS_W + sx;
+      if (!mask[idx] || visited[idx]) continue;
+
+      // BFS from this seed
+      queue.length = 0;
+      queue.push(idx);
+      visited[idx] = 1;
+      let minX = sx, maxX = sx, minY = sy, maxY = sy, size = 0;
+
+      let head = 0;
+      while (head < queue.length) {
+        const cur = queue[head++];
+        const cx = cur % DS_W, cy = (cur / DS_W) | 0;
+        if (cx < minX) minX = cx;
+        if (cx > maxX) maxX = cx;
+        if (cy < minY) minY = cy;
+        if (cy > maxY) maxY = cy;
+        size++;
+
+        // 4-connectivity neighbours
+        const neighbours = [cur - 1, cur + 1, cur - DS_W, cur + DS_W];
+        for (const n of neighbours) {
+          if (n < 0 || n >= DS_W * DS_H) continue;
+          const nx = n % DS_W, ny = (n / DS_W) | 0;
+          if (nx < 0 || nx >= DS_W || ny < 0 || ny >= DS_H) continue;
+          if (!mask[n] || visited[n]) continue;
+          visited[n] = 1;
+          queue.push(n);
+        }
+      }
+
+      // Must be at least 2% of the search area, and face-shaped (h/w in 0.8–2.5)
+      const blobW = maxX - minX + 1, blobH = maxY - minY + 1;
+      const ratio = blobH / (blobW || 1);
+      const minArea = (x1 - x0) * (y1 - y0) * 0.02;
+      if (size >= minArea && ratio > 0.7 && ratio < 2.6) {
+        if (!bestBlob || size > bestBlob.size) {
+          bestBlob = { minX, minY, maxX, maxY, size };
+        }
       }
     }
   }
 
-  // Need at least 4% of frame to be skin-coloured
-  if (cnt < DS_W * DS_H * 0.04) return null;
+  return bestBlob;
+}
 
-  // Scale back to original video coordinates
+// ── Build skin mask from hidden canvas pixel data ─────────────────────────────
+const _dsCv  = typeof document !== "undefined" ? document.createElement("canvas") : null as unknown as HTMLCanvasElement;
+const _dsCtx = _dsCv?.getContext("2d", { willReadFrequently: true }) ?? null as unknown as CanvasRenderingContext2D;
+
+function skinFaceDetect(
+  srcCtx: CanvasRenderingContext2D,
+  vw: number, vh: number
+): FaceBox | null {
+  if (!_dsCv || !_dsCtx) return null;
+  _dsCv.width = DS_W; _dsCv.height = DS_H;
+  _dsCtx.drawImage(srcCtx.canvas, 0, 0, vw, vh, 0, 0, DS_W, DS_H);
+  const px = _dsCtx.getImageData(0, 0, DS_W, DS_H).data;
+
+  // Build binary mask
+  const mask = new Uint8Array(DS_W * DS_H);
+  for (let i = 0; i < mask.length; i++) {
+    mask[i] = isSkin(px[i * 4], px[i * 4 + 1], px[i * 4 + 2]) ? 1 : 0;
+  }
+
+  const blob = findFaceBlob(mask);
+  if (!blob) return null;
+
+  // Scale back to original video pixel coords
   const scX = vw / DS_W, scY = vh / DS_H;
-  const pad = Math.round(Math.min(scX, scY) * 3);
-  const x = Math.max(0, Math.round(minX * scX) - pad);
-  const y = Math.max(0, Math.round(minY * scY) - pad);
-  const x2 = Math.min(vw, Math.round(maxX * scX) + pad);
-  const y2 = Math.min(vh, Math.round(maxY * scY) + pad);
+
+  // Add a small padding (~8% of blob size) for a natural-looking box
+  const padX = Math.round((blob.maxX - blob.minX) * scX * 0.06);
+  const padY = Math.round((blob.maxY - blob.minY) * scY * 0.06);
+
+  const x = Math.max(0, Math.round(blob.minX * scX) - padX);
+  const y = Math.max(0, Math.round(blob.minY * scY) - padY);
+  const x2 = Math.min(vw, Math.round(blob.maxX * scX) + padX);
+  const y2 = Math.min(vh, Math.round(blob.maxY * scY) + padY);
+
   const w = x2 - x, h = y2 - y;
-  if (w < 40 || h < 40) return null;
+  if (w < 30 || h < 30) return null;
   return { x, y, w, h };
 }
-skinBlobDetect._dsCv  = typeof document !== "undefined" ? document.createElement("canvas") : null as unknown as HTMLCanvasElement;
-skinBlobDetect._dsCtx = skinBlobDetect._dsCv?.getContext("2d", { willReadFrequently: true }) ?? null as unknown as CanvasRenderingContext2D;
 
-// ─── Smooth face box with exponential moving average ─────────────────────────
-function smoothBox(
-  prev: FaceBox | null, next: FaceBox, alpha: number
-): FaceBox {
+// ── Smooth with EMA to prevent jitter ────────────────────────────────────────
+function smoothBox(prev: FaceBox | null, next: FaceBox, alpha: number): FaceBox {
   if (!prev) return next;
   return {
     x: prev.x * (1 - alpha) + next.x * alpha,
@@ -93,15 +143,14 @@ function smoothBox(
   };
 }
 
-// ─── Hook ─────────────────────────────────────────────────────────────────────
+// ── Hook ─────────────────────────────────────────────────────────────────────
 export function useFaceDetection(
   videoRef: React.RefObject<HTMLVideoElement | null>
 ) {
-  // Hidden canvas for pixel reads
   const cvRef       = useRef<HTMLCanvasElement | null>(null);
   const ctxRef      = useRef<CanvasRenderingContext2D | null>(null);
   const rafRef      = useRef<number>(0);
-  const nativeDet   = useRef<FaceDetector | null>(null);
+  const nativeDet   = useRef<unknown>(null);
   const smoothedBox = useRef<FaceBox | null>(null);
   const missFrames  = useRef<number>(0);
 
@@ -111,23 +160,17 @@ export function useFaceDetection(
     videoW: 0, videoH: 0,
   });
 
-  // ── Init: try native FaceDetector ─────────────────────────────────────────
+  // Try native browser FaceDetector
   useEffect(() => {
     if ("FaceDetector" in window) {
       try {
-        // @ts-expect-error — FaceDetector is a browser API, not in TS lib yet
+        // @ts-expect-error – experimental browser API
         nativeDet.current = new window.FaceDetector({ maxDetectedFaces: 1, fastMode: false });
-        console.info("[FaceDetection] Using native browser FaceDetector ✓");
-      } catch {
-        console.info("[FaceDetection] Native FaceDetector unavailable, using skin-colour fallback");
-      }
-    } else {
-      console.info("[FaceDetection] FaceDetector API not available, using skin-colour fallback");
+      } catch { /* not available */ }
     }
     setData(prev => ({ ...prev, loading: false }));
   }, []);
 
-  // ── Detection loop ─────────────────────────────────────────────────────────
   const loop = useCallback(async () => {
     const video = videoRef.current;
     if (!video || video.readyState < 2 || !video.videoWidth) {
@@ -137,7 +180,6 @@ export function useFaceDetection(
 
     const vw = video.videoWidth, vh = video.videoHeight;
 
-    // Lazy canvas init
     if (!cvRef.current) {
       cvRef.current = document.createElement("canvas");
       ctxRef.current = cvRef.current.getContext("2d", { willReadFrequently: true });
@@ -151,61 +193,39 @@ export function useFaceDetection(
     let rawBox: FaceBox | null = null;
     let keypoints: FaceKeypoint[] = [];
 
-    // ── Tier 1: native browser FaceDetector ──────────────────────────────────
+    // Tier 1: native browser FaceDetector
     if (nativeDet.current) {
       try {
         // @ts-expect-error
-        const results: FaceDetectorResult[] = await nativeDet.current.detect(video);
+        const results = await nativeDet.current.detect(video);
         if (results.length > 0) {
           const f = results[0];
-          rawBox = {
-            x: f.boundingBox.x,
-            y: f.boundingBox.y,
-            w: f.boundingBox.width,
-            h: f.boundingBox.height,
-          };
-          // Landmarks: { x, y } in image pixels
-          keypoints = (f.landmarks ?? []).map((lm: { locations: { x: number; y: number }[] }) =>
-            lm.locations?.[0] ?? { x: 0, y: 0 }
-          );
+          rawBox = { x: f.boundingBox.x, y: f.boundingBox.y, w: f.boundingBox.width, h: f.boundingBox.height };
+          keypoints = (f.landmarks ?? []).map((lm: { locations: { x: number; y: number }[] }) => lm.locations?.[0] ?? { x: 0, y: 0 });
         }
-      } catch {
-        nativeDet.current = null;   // disable if it errors
-      }
+      } catch { nativeDet.current = null; }
     }
 
-    // ── Tier 2: skin-colour blob fallback ────────────────────────────────────
-    if (!rawBox) {
-      rawBox = skinBlobDetect(ctx, vw, vh);
-    }
+    // Tier 2: YCbCr skin blob (precise face-blob BFS)
+    if (!rawBox) rawBox = skinFaceDetect(ctx, vw, vh);
 
-    // ── Smoothing + miss-frame decay ──────────────────────────────────────────
+    // Smooth & miss-frame handling
     if (rawBox) {
       missFrames.current = 0;
-      smoothedBox.current = smoothBox(smoothedBox.current, rawBox, 0.35);
+      smoothedBox.current = smoothBox(smoothedBox.current, rawBox, 0.3);
     } else {
       missFrames.current++;
-      // Keep the last box for up to 10 missed frames (handles blinks / occlusion)
-      if (missFrames.current > 10) smoothedBox.current = null;
+      if (missFrames.current > 15) smoothedBox.current = null;
     }
 
     const box = smoothedBox.current;
-    setData({
-      detected: box !== null,
-      loading:  false,
-      box,
-      keypoints,
-      videoW: vw,
-      videoH: vh,
-    });
+    setData({ detected: box !== null, loading: false, box, keypoints, videoW: vw, videoH: vh });
 
     rafRef.current = requestAnimationFrame(loop);
   }, [videoRef]);
 
   useEffect(() => {
-    if (!data.loading) {
-      rafRef.current = requestAnimationFrame(loop);
-    }
+    if (!data.loading) rafRef.current = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(rafRef.current);
   }, [data.loading, loop]);
 
