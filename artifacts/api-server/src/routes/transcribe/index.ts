@@ -32,19 +32,14 @@ router.post("/transcribe", async (req, res) => {
       return;
     }
 
-    const { openai, detectAudioFormat } = await getAudioModule();
-    const { toFile } = await import("openai");
+    const { detectAudioFormat, speechToText } = await getAudioModule();
 
     const detected = detectAudioFormat(audioBuffer);
-    const ext = detected === "unknown" ? "webm" : detected;
-    const file = await toFile(audioBuffer, `audio.${ext}`);
+    const format = (detected === "wav" || detected === "mp3") ? detected : "webm";
 
-    const response = await openai.audio.transcriptions.create({
-      file,
-      model: "gpt-4o-mini-transcribe",
-    });
+    const text = await speechToText(audioBuffer, format as "wav" | "mp3" | "webm");
 
-    res.json({ text: (response.text || "").trim() });
+    res.json({ text: (text || "").trim() });
   } catch (err: any) {
     const msg = err?.message || String(err);
     console.error("Transcribe error:", msg);
