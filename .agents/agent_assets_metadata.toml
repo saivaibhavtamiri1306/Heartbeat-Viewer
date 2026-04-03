@@ -6,3 +6,9 @@ id = "fngbHVXfnESRQmMoZFimb"
 uri = "file://HOLO_SYNC_DOCUMENTATION.md"
 type = "text"
 title = "Holo-Sync Complete Documentation (Hackathon Ready)"
+
+[[outputs]]
+id = "dXObvJeWERUhTt-HOEs1K"
+uri = "file://HOLO_SYNC_DOCUMENTATION.docx"
+type = "word_document"
+title = "Holo-Sync Complete Documentation (DOCX)"
