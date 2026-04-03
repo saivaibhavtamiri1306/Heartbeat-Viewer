@@ -27,13 +27,15 @@ type AvatarEmotion = "neutral" | "empathetic" | "stern" | "curious" | "stressed"
 
 export default function Interview({ domain, onEnd }: InterviewProps) {
   const { videoRef, isActive: camActive, error: camError, startWebcam, stopWebcam } = useWebcam();
-  const faceBoxRef = useRef<FaceBox | null>(null);
-  const { data: heartData, start: startHeartbeat, stop: stopHeartbeat, panic, calm } = useHeartbeat(videoRef, faceBoxRef);
+  const faceBoxRef     = useRef<FaceBox | null>(null);
+  const foreheadBoxRef = useRef<FaceBox | null>(null);
+  const { data: heartData, start: startHeartbeat, stop: stopHeartbeat, panic, calm } = useHeartbeat(videoRef, faceBoxRef, foreheadBoxRef);
   const face = useFaceDetection(videoRef);
   const { data: speech, startListening, stopListening, clearCurrentAnswer } = useSpeechRecognition();
 
-  // Keep faceBoxRef in sync with latest detected face box
-  useEffect(() => { faceBoxRef.current = face.box ?? null; }, [face.box]);
+  // Keep face refs in sync with latest detection
+  useEffect(() => { faceBoxRef.current     = face.box         ?? null; }, [face.box]);
+  useEffect(() => { foreheadBoxRef.current = face.foreheadBox ?? null; }, [face.foreheadBox]);
 
   const [phase, setPhase] = useState<Phase>("starting");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
