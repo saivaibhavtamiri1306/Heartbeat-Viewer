@@ -29,13 +29,14 @@ export default function Interview({ domain, onEnd }: InterviewProps) {
   const { videoRef, isActive: camActive, error: camError, startWebcam, stopWebcam } = useWebcam();
   const faceBoxRef     = useRef<FaceBox | null>(null);
   const foreheadBoxRef = useRef<FaceBox | null>(null);
-  const { data: heartData, start: startHeartbeat, stop: stopHeartbeat, panic, calm } = useHeartbeat(videoRef, faceBoxRef, foreheadBoxRef);
+  const cheekBoxRef    = useRef<FaceBox | null>(null);
+  const { data: heartData, start: startHeartbeat, stop: stopHeartbeat, panic, calm } = useHeartbeat(videoRef, faceBoxRef, foreheadBoxRef, cheekBoxRef);
   const face = useFaceDetection(videoRef);
   const { data: speech, startListening, stopListening, clearCurrentAnswer } = useSpeechRecognition();
 
-  // Keep face refs in sync with latest detection
   useEffect(() => { faceBoxRef.current     = face.box         ?? null; }, [face.box]);
   useEffect(() => { foreheadBoxRef.current = face.foreheadBox ?? null; }, [face.foreheadBox]);
+  useEffect(() => { cheekBoxRef.current    = face.cheekBox    ?? null; }, [face.cheekBox]);
 
   const [phase, setPhase] = useState<Phase>("starting");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
