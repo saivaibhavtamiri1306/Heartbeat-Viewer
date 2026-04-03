@@ -340,9 +340,6 @@ function sampleROI(
     );
   }
 
-  if (cnt < 30)
-    addBox(vw * 0.25, vh * 0.08, vw * 0.50, vh * 0.30, "SC");
-
   if (cnt < 10) return { r: 0, g: 0, b: 0, ok: false, label: "NONE" };
   const r = totalR / cnt, g = totalG / cnt, b = totalB / cnt;
   return { r, g, b, ok: r > 15 && g > 10 && r < 250, label };
@@ -368,6 +365,8 @@ export function useHeartbeat(
   const fpsRef    = useRef<number>(30);
   const prevMsRef = useRef<number>(0);
   const histBpm   = useRef<number[]>([]);
+  const noFaceFrames = useRef<number>(0);
+  const FACE_LOST_THRESHOLD = 15;
 
   const [data, setData] = useState<HeartbeatData>({
     bpm: null, confidence: 0, signal: [], isActive: false,
@@ -405,6 +404,7 @@ export function useHeartbeat(
     );
 
     if (roi.ok) {
+      noFaceFrames.current = 0;
       rawBuf.current.push([now, roi.r, roi.g, roi.b]);
       while (rawBuf.current.length > 2 && rawBuf.current[0][0] < now - 20000)
         rawBuf.current.shift();
@@ -432,9 +432,32 @@ export function useHeartbeat(
           resR.current.shift(); resG.current.shift(); resB.current.shift();
         }
       }
+    } else {
+      noFaceFrames.current++;
+      if (noFaceFrames.current === FACE_LOST_THRESHOLD) {
+        bpmRef.current = null;
+        rawBuf.current = [];
+        resR.current = [];
+        resG.current = [];
+        resB.current = [];
+        lastResMs.current = 0;
+        histBpm.current = [];
+        calRef.current = 0;
+        setData({
+          bpm: null, confidence: 0, signal: [], isActive: true,
+          stress: "low", trend: "stable", algorithm: "PEAK+FFT+ACF",
+          faceDetected: false, frameRate: Math.round(fpsRef.current),
+          calibrating: true, roiDebug: "NO FACE",
+        });
+      } else if (noFaceFrames.current > FACE_LOST_THRESHOLD && frameRef.current % 30 === 0) {
+        setData(prev => ({
+          ...prev, frameRate: Math.round(fpsRef.current),
+        }));
+      }
+      rafRef.current = requestAnimationFrame(processFrame);
+      return;
     }
 
-    // ── Run analysis every 5 frames after enough data collected ──────────────
     if (frameRef.current % 5 === 0 && resR.current.length >= WIN) {
 
       const len = resR.current.length;
@@ -536,6 +559,7 @@ export function useHeartbeat(
     rawBuf.current = []; resR.current = []; resG.current = []; resB.current = [];
     lastResMs.current = 0; bpmRef.current = null; frameRef.current = 0;
     calRef.current = 0; fpsRef.current = 30; prevMsRef.current = 0; histBpm.current = [];
+    noFaceFrames.current = 0;
     rafRef.current = requestAnimationFrame(processFrame);
   }, [processFrame]);
 

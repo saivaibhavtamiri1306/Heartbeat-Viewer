@@ -13,9 +13,11 @@ export default function HeartbeatMonitor({ data, onPanic, onCalm }: HeartbeatMon
   const trailRef = useRef<number[]>([]);
   const [displayBpm, setDisplayBpm] = useState<number | null>(data.bpm);
 
-  // Smooth BPM display counter
   useEffect(() => {
-    if (data.bpm === null) return;
+    if (data.bpm === null) {
+      setDisplayBpm(null);
+      return;
+    }
     let targetBpm = data.bpm;
     let current = displayBpm ?? targetBpm;
     const interval = setInterval(() => {
@@ -277,7 +279,7 @@ export default function HeartbeatMonitor({ data, onPanic, onCalm }: HeartbeatMon
           <div
             className="h-full rounded-full transition-all duration-500"
             style={{
-              width: `${Math.min(100, Math.max(0, ((displayBpm - 40) / 140) * 100))}%`,
+              width: `${displayBpm !== null ? Math.min(100, Math.max(0, ((displayBpm - 40) / 140) * 100)) : 0}%`,
               background: `linear-gradient(90deg, #00ff88, #ffaa00, ${stressColor})`,
               boxShadow: `0 0 12px ${stressColor}88`,
             }}
