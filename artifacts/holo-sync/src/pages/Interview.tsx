@@ -10,25 +10,27 @@ import { useFaceDetection } from "../hooks/useFaceDetection";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import type { FaceBox } from "../hooks/useFaceDetection";
 import {
-  QUESTIONS,
   EMPATHY_RESPONSES,
   BLUFF_RESPONSES,
   HR_SPIKE_RESPONSES,
   HR_DROP_RESPONSES,
   HR_ELEVATED_RESPONSES,
   PANEL_AVATARS,
+  getFilteredQuestions,
   type Domain,
+  type InterviewConfig,
 } from "../data/questions";
 
 interface InterviewProps {
   domain: Domain;
+  config: InterviewConfig;
   onEnd: () => void;
 }
 
 type Phase = "starting" | "active" | "paused" | "ended";
 type AvatarEmotion = "neutral" | "empathetic" | "stern" | "curious" | "stressed";
 
-export default function Interview({ domain, onEnd }: InterviewProps) {
+export default function Interview({ domain, config, onEnd }: InterviewProps) {
   const { videoRef, isActive: camActive, error: camError, startWebcam, stopWebcam } = useWebcam();
   const faceBoxRef     = useRef<FaceBox | null>(null);
   const foreheadBoxRef = useRef<FaceBox | null>(null);
@@ -66,7 +68,9 @@ export default function Interview({ domain, onEnd }: InterviewProps) {
   const baselineBpmRef = useRef<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const questions = QUESTIONS[domain.id] || QUESTIONS.swe;
+  const [questions] = useState(() =>
+    getFilteredQuestions(domain.id, config.topics, config.difficulty)
+  );
   const panelAvatars =
     domain.panelMode
       ? PANEL_AVATARS[domain.id as keyof typeof PANEL_AVATARS] || PANEL_AVATARS.upsc
@@ -214,6 +218,10 @@ export default function Interview({ domain, onEnd }: InterviewProps) {
       addMessage({
         role: "system",
         text: `DOMAIN: ${domain.label.toUpperCase()} | ${domain.panelMode ? "PANEL MODE — 3 INTERVIEWERS" : "SINGLE INTERVIEWER MODE"}`,
+      });
+      addMessage({
+        role: "system",
+        text: `📋 ${config.background} | ${config.difficulty.toUpperCase()} difficulty | ${config.topics.length} topic${config.topics.length !== 1 ? "s" : ""} | ${questions.length} questions`,
       });
       addMessage({ role: "system", text: "🎤 MIC AVAILABLE — Click the mic button to speak your answers" });
       await new Promise(r => setTimeout(r, 1000));
@@ -407,6 +415,13 @@ export default function Interview({ domain, onEnd }: InterviewProps) {
           <div className="h-4 w-px bg-cyan-500/30" />
           <span className="text-xs font-mono uppercase tracking-widest font-bold" style={{ color: domain.color }}>
             {domain.icon} {domain.label}
+          </span>
+          <span className={`text-xs font-mono uppercase tracking-widest border rounded px-1.5 py-0.5 ${
+            config.difficulty === "easy" ? "text-green-400 border-green-400/30" :
+            config.difficulty === "hard" ? "text-red-400 border-red-400/30" :
+            "text-yellow-400 border-yellow-400/30"
+          }`}>
+            {config.difficulty}
           </span>
           {domain.panelMode && (
             <span className="text-xs font-mono uppercase tracking-widest text-yellow-400 border border-yellow-400/30 rounded px-1.5 py-0.5">
