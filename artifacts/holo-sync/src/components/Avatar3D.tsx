@@ -193,57 +193,75 @@ function HumanHead({ emotion, isSpeaking, bpm, index = 0, name, isActive = true,
   const rightEyeRef = useRef<THREE.Mesh>(null);
   const leftIrisRef = useRef<THREE.Mesh>(null);
   const rightIrisRef = useRef<THREE.Mesh>(null);
+  const leftPupilRef = useRef<THREE.Mesh>(null);
+  const rightPupilRef = useRef<THREE.Mesh>(null);
   const upperLipRef = useRef<THREE.Mesh>(null);
   const lowerLipRef = useRef<THREE.Mesh>(null);
   const leftBrowRef = useRef<THREE.Mesh>(null);
   const rightBrowRef = useRef<THREE.Mesh>(null);
+  const leftLidRef = useRef<THREE.Mesh>(null);
+  const rightLidRef = useRef<THREE.Mesh>(null);
   const scanRef = useRef<THREE.Mesh>(null);
+  const neckRef = useRef<THREE.Mesh>(null);
 
   const colors = EMOTION_COLORS[emotion];
   const offset = index * (Math.PI * 2 / 3);
 
   const skinTone = useMemo(() => {
-    const base = new THREE.Color(0xdeb887);
-    base.lerp(new THREE.Color(colors.primary), 0.12);
+    const base = new THREE.Color(0xe8beac);
+    base.lerp(new THREE.Color(colors.primary), 0.08);
     return base;
   }, [colors.primary]);
+
+  const skinDark = useMemo(() => skinTone.clone().multiplyScalar(0.85), [skinTone]);
+  const skinDeep = useMemo(() => skinTone.clone().multiplyScalar(0.7), [skinTone]);
+  const lipColor = useMemo(() => {
+    const c = new THREE.Color(0xc47060);
+    c.lerp(new THREE.Color(colors.primary), 0.08);
+    return c;
+  }, [colors.primary]);
+  const lipDark = useMemo(() => lipColor.clone().multiplyScalar(0.85), [lipColor]);
 
   const mouthOpen = useRef(0);
 
   useFrame((state) => {
     const t = state.clock.elapsedTime;
 
-    const targetActive = isActive ? 1 : 0.5;
-
     if (headGroupRef.current) {
-      headGroupRef.current.rotation.y = Math.sin(t * 0.3 + offset) * (isActive ? 0.2 : 0.06);
-      headGroupRef.current.rotation.x = Math.sin(t * 0.2 + offset) * 0.05;
+      headGroupRef.current.rotation.y = Math.sin(t * 0.3 + offset) * (isActive ? 0.15 : 0.05);
+      headGroupRef.current.rotation.x = Math.sin(t * 0.2 + offset) * 0.04;
       const curScale = headGroupRef.current.scale.x;
       const tgtScale = isActive ? 1.0 : 0.88;
       headGroupRef.current.scale.setScalar(THREE.MathUtils.lerp(curScale, tgtScale, 0.04));
     }
 
-    if (leftEyeRef.current && rightEyeRef.current) {
+    if (leftEyeRef.current && rightEyeRef.current && leftLidRef.current && rightLidRef.current) {
       const blink = Math.sin(t * 0.5 + offset);
       const blinkScale = blink > 0.94 ? Math.max(0.1, 1 - (blink - 0.94) * 16) : 1;
       leftEyeRef.current.scale.y = blinkScale;
       rightEyeRef.current.scale.y = blinkScale;
+      leftLidRef.current.scale.y = blinkScale < 0.5 ? 1.5 : 0.6;
+      rightLidRef.current.scale.y = blinkScale < 0.5 ? 1.5 : 0.6;
     }
 
-    if (leftIrisRef.current && rightIrisRef.current) {
-      const lookX = Math.sin(t * 0.4 + offset) * 0.03;
-      const lookY = Math.sin(t * 0.3 + offset + 1) * 0.02;
-      leftIrisRef.current.position.x = -0.33 + lookX;
-      leftIrisRef.current.position.y = 0.22 + lookY;
-      rightIrisRef.current.position.x = 0.33 + lookX;
-      rightIrisRef.current.position.y = 0.22 + lookY;
+    if (leftIrisRef.current && rightIrisRef.current && leftPupilRef.current && rightPupilRef.current) {
+      const lookX = Math.sin(t * 0.4 + offset) * 0.025;
+      const lookY = Math.sin(t * 0.3 + offset + 1) * 0.015;
+      leftIrisRef.current.position.x = -0.28 + lookX;
+      leftIrisRef.current.position.y = 0.28 + lookY;
+      rightIrisRef.current.position.x = 0.28 + lookX;
+      rightIrisRef.current.position.y = 0.28 + lookY;
+      leftPupilRef.current.position.x = -0.28 + lookX;
+      leftPupilRef.current.position.y = 0.28 + lookY;
+      rightPupilRef.current.position.x = 0.28 + lookX;
+      rightPupilRef.current.position.y = 0.28 + lookY;
     }
 
     if (leftBrowRef.current && rightBrowRef.current) {
       const browY = emotion === "stern" ? -0.04 : emotion === "curious" ? 0.06 : 0;
       const browTilt = emotion === "stern" ? 0.15 : emotion === "curious" ? -0.08 : 0;
-      leftBrowRef.current.position.y = THREE.MathUtils.lerp(leftBrowRef.current.position.y, 0.48 + browY, 0.05);
-      rightBrowRef.current.position.y = THREE.MathUtils.lerp(rightBrowRef.current.position.y, 0.48 + browY, 0.05);
+      leftBrowRef.current.position.y = THREE.MathUtils.lerp(leftBrowRef.current.position.y, 0.52 + browY, 0.05);
+      rightBrowRef.current.position.y = THREE.MathUtils.lerp(rightBrowRef.current.position.y, 0.52 + browY, 0.05);
       leftBrowRef.current.rotation.z = THREE.MathUtils.lerp(leftBrowRef.current.rotation.z, browTilt, 0.05);
       rightBrowRef.current.rotation.z = THREE.MathUtils.lerp(rightBrowRef.current.rotation.z, -browTilt, 0.05);
     }
@@ -253,17 +271,17 @@ function HumanHead({ emotion, isSpeaking, bpm, index = 0, name, isActive = true,
 
     if (upperLipRef.current && lowerLipRef.current && jawRef.current) {
       const open = mouthOpen.current;
-      upperLipRef.current.position.y = -0.22 + open * 0.02;
-      lowerLipRef.current.position.y = -0.30 - open * 0.12;
-      jawRef.current.position.y = -0.35 - open * 0.06;
-      jawRef.current.scale.y = 1 + open * 0.08;
+      upperLipRef.current.position.y = -0.18 + open * 0.015;
+      lowerLipRef.current.position.y = -0.25 - open * 0.1;
+      jawRef.current.position.y = -0.35 - open * 0.05;
+      jawRef.current.scale.y = 1 + open * 0.06;
     }
 
     if (coreRef.current) {
       const bpmHz = bpm / 60;
       const pulse = Math.abs(Math.sin(t * bpmHz * Math.PI));
       (coreRef.current.material as THREE.MeshStandardMaterial).emissiveIntensity =
-        THREE.MathUtils.lerp(0.05, 0.15, pulse) * targetActive;
+        THREE.MathUtils.lerp(0.03, 0.12, pulse) * (isActive ? 1 : 0.5);
     }
 
     if (scanRef.current) {
@@ -276,17 +294,17 @@ function HumanHead({ emotion, isSpeaking, bpm, index = 0, name, isActive = true,
   const skinMat = useMemo(() => ({
     color: skinTone,
     emissive: new THREE.Color(colors.emissive),
-    emissiveIntensity: 0.08,
-    roughness: 0.65,
-    metalness: 0.05,
+    emissiveIntensity: 0.06,
+    roughness: 0.55,
+    metalness: 0.02,
   }), [skinTone, colors.emissive]);
 
   const holoOverlay = useMemo(() => ({
     color: colors.primary,
     emissive: colors.primary,
-    emissiveIntensity: 0.4,
+    emissiveIntensity: 0.3,
     transparent: true,
-    opacity: 0.06,
+    opacity: 0.04,
     roughness: 0,
     metalness: 1,
   }), [colors.primary]);
@@ -295,114 +313,298 @@ function HumanHead({ emotion, isSpeaking, bpm, index = 0, name, isActive = true,
     <group>
       <ActiveSpeakerGlow color={colors.primary} isActive={!!(isActive && isSpeaking)} />
       <group ref={headGroupRef}>
-        <mesh ref={coreRef}>
-          <sphereGeometry args={[0.95, 64, 64]} />
+
+        {/* ── Cranium (main head shape — slightly elongated vertically) ── */}
+        <mesh ref={coreRef} position={[0, 0.08, 0]}>
+          <sphereGeometry args={[0.88, 64, 64]} />
           <meshStandardMaterial {...skinMat} />
         </mesh>
 
-        <mesh scale={[1, 1.15, 1]}>
-          <sphereGeometry args={[0.96, 32, 32]} />
-          <meshStandardMaterial {...holoOverlay} />
+        {/* ── Forehead prominence ── */}
+        <mesh position={[0, 0.55, 0.45]} scale={[0.7, 0.28, 0.3]}>
+          <sphereGeometry args={[1, 32, 32]} />
+          <meshStandardMaterial {...skinMat} />
         </mesh>
 
-        <mesh ref={scanRef} position={[0, 0, 0.9]}>
-          <planeGeometry args={[1.8, 0.02]} />
-          <meshStandardMaterial color={colors.primary} emissive={colors.primary} emissiveIntensity={2} transparent opacity={0.15} />
+        {/* ── Temple indents (slightly darker) ── */}
+        <mesh position={[-0.65, 0.3, 0.35]} scale={[0.18, 0.25, 0.15]}>
+          <sphereGeometry args={[1, 16, 16]} />
+          <meshStandardMaterial color={skinDark} roughness={0.6} metalness={0.02} />
+        </mesh>
+        <mesh position={[0.65, 0.3, 0.35]} scale={[0.18, 0.25, 0.15]}>
+          <sphereGeometry args={[1, 16, 16]} />
+          <meshStandardMaterial color={skinDark} roughness={0.6} metalness={0.02} />
         </mesh>
 
-        <mesh position={[0, -0.1, 0.88]} scale={[0.14, 0.12, 0.15]}>
+        {/* ── Cheekbones ── */}
+        <mesh position={[-0.52, 0.08, 0.62]} scale={[0.22, 0.14, 0.18]}>
+          <sphereGeometry args={[1, 24, 24]} />
+          <meshStandardMaterial {...skinMat} />
+        </mesh>
+        <mesh position={[0.52, 0.08, 0.62]} scale={[0.22, 0.14, 0.18]}>
+          <sphereGeometry args={[1, 24, 24]} />
+          <meshStandardMaterial {...skinMat} />
+        </mesh>
+
+        {/* ── Mid-face / maxilla ── */}
+        <mesh position={[0, 0.0, 0.72]} scale={[0.38, 0.3, 0.2]}>
+          <sphereGeometry args={[1, 32, 32]} />
+          <meshStandardMaterial {...skinMat} />
+        </mesh>
+
+        {/* ── Eye socket depressions ── */}
+        <mesh position={[-0.28, 0.28, 0.72]} scale={[0.17, 0.1, 0.08]}>
+          <sphereGeometry args={[1, 16, 16]} />
+          <meshStandardMaterial color={skinDeep} roughness={0.7} metalness={0.01} />
+        </mesh>
+        <mesh position={[0.28, 0.28, 0.72]} scale={[0.17, 0.1, 0.08]}>
+          <sphereGeometry args={[1, 16, 16]} />
+          <meshStandardMaterial color={skinDeep} roughness={0.7} metalness={0.01} />
+        </mesh>
+
+        {/* ── Brow ridge ── */}
+        <mesh position={[0, 0.4, 0.7]} scale={[0.55, 0.06, 0.12]}>
+          <sphereGeometry args={[1, 32, 16]} />
+          <meshStandardMaterial {...skinMat} />
+        </mesh>
+
+        {/* ── Nose bridge ── */}
+        <mesh position={[0, 0.15, 0.82]} scale={[0.06, 0.18, 0.1]}>
+          <sphereGeometry args={[1, 16, 16]} />
+          <meshStandardMaterial color={skinTone} roughness={0.5} metalness={0.02} />
+        </mesh>
+
+        {/* ── Nose tip (bulbous) ── */}
+        <mesh position={[0, -0.02, 0.92]} scale={[0.1, 0.08, 0.1]}>
+          <sphereGeometry args={[1, 24, 24]} />
+          <meshStandardMaterial color={skinTone} roughness={0.45} metalness={0.02} />
+        </mesh>
+
+        {/* ── Nose wings / nostrils ── */}
+        <mesh position={[-0.06, -0.06, 0.88]} scale={[0.05, 0.04, 0.05]}>
           <sphereGeometry args={[1, 12, 12]} />
-          <meshStandardMaterial color={skinTone.clone().multiplyScalar(0.95)} roughness={0.7} metalness={0.05} />
+          <meshStandardMaterial color={skinDark} roughness={0.6} metalness={0.01} />
         </mesh>
-        <mesh position={[0, -0.15, 0.92]} scale={[0.06, 0.04, 0.05]}>
+        <mesh position={[0.06, -0.06, 0.88]} scale={[0.05, 0.04, 0.05]}>
+          <sphereGeometry args={[1, 12, 12]} />
+          <meshStandardMaterial color={skinDark} roughness={0.6} metalness={0.01} />
+        </mesh>
+
+        {/* ── Nostril holes (dark) ── */}
+        <mesh position={[-0.04, -0.07, 0.92]} scale={[0.025, 0.015, 0.01]}>
           <sphereGeometry args={[1, 8, 8]} />
-          <meshStandardMaterial color={skinTone.clone().multiplyScalar(0.85)} roughness={0.7} metalness={0.05} />
+          <meshStandardMaterial color={0x3d2b1f} roughness={0.9} />
+        </mesh>
+        <mesh position={[0.04, -0.07, 0.92]} scale={[0.025, 0.015, 0.01]}>
+          <sphereGeometry args={[1, 8, 8]} />
+          <meshStandardMaterial color={0x3d2b1f} roughness={0.9} />
         </mesh>
 
+        {/* ── Nasolabial folds (subtle creases from nose to mouth) ── */}
+        <mesh position={[-0.18, -0.08, 0.82]} scale={[0.03, 0.12, 0.02]} rotation={[0, 0, 0.15]}>
+          <sphereGeometry args={[1, 8, 8]} />
+          <meshStandardMaterial color={skinDeep} roughness={0.7} metalness={0.01} transparent opacity={0.5} />
+        </mesh>
+        <mesh position={[0.18, -0.08, 0.82]} scale={[0.03, 0.12, 0.02]} rotation={[0, 0, -0.15]}>
+          <sphereGeometry args={[1, 8, 8]} />
+          <meshStandardMaterial color={skinDeep} roughness={0.7} metalness={0.01} transparent opacity={0.5} />
+        </mesh>
+
+        {/* ── Eyes (eyeballs) ── */}
         <group>
-          <mesh ref={leftEyeRef} position={[-0.33, 0.22, 0.85]} scale={[0.14, 0.09, 0.06]}>
-            <sphereGeometry args={[1, 16, 16]} />
-            <meshStandardMaterial color={0xffffff} roughness={0.1} metalness={0} />
+          <mesh ref={leftEyeRef} position={[-0.28, 0.28, 0.82]} scale={[0.12, 0.08, 0.06]}>
+            <sphereGeometry args={[1, 24, 24]} />
+            <meshStandardMaterial color={0xf5f5f0} roughness={0.05} metalness={0} />
           </mesh>
-          <mesh ref={rightEyeRef} position={[0.33, 0.22, 0.85]} scale={[0.14, 0.09, 0.06]}>
-            <sphereGeometry args={[1, 16, 16]} />
-            <meshStandardMaterial color={0xffffff} roughness={0.1} metalness={0} />
-          </mesh>
-          <mesh ref={leftIrisRef} position={[-0.33, 0.22, 0.9]} scale={[0.055, 0.055, 0.03]}>
-            <sphereGeometry args={[1, 12, 12]} />
-            <meshStandardMaterial color={0x2d1b00} emissive={colors.primary} emissiveIntensity={0.3} roughness={0.2} />
-          </mesh>
-          <mesh ref={rightIrisRef} position={[0.33, 0.22, 0.9]} scale={[0.055, 0.055, 0.03]}>
-            <sphereGeometry args={[1, 12, 12]} />
-            <meshStandardMaterial color={0x2d1b00} emissive={colors.primary} emissiveIntensity={0.3} roughness={0.2} />
+          <mesh ref={rightEyeRef} position={[0.28, 0.28, 0.82]} scale={[0.12, 0.08, 0.06]}>
+            <sphereGeometry args={[1, 24, 24]} />
+            <meshStandardMaterial color={0xf5f5f0} roughness={0.05} metalness={0} />
           </mesh>
 
-          <mesh position={[-0.33, 0.22, 0.82]}>
-            <circleGeometry args={[0.16, 16]} />
-            <meshStandardMaterial color={colors.primary} emissive={colors.primary} emissiveIntensity={0.3} transparent opacity={0.08} />
+          {/* ── Irises ── */}
+          <mesh ref={leftIrisRef} position={[-0.28, 0.28, 0.875]} scale={[0.05, 0.05, 0.02]}>
+            <sphereGeometry args={[1, 16, 16]} />
+            <meshStandardMaterial color={0x3d6b4f} emissive={colors.primary} emissiveIntensity={0.2} roughness={0.15} />
           </mesh>
-          <mesh position={[0.33, 0.22, 0.82]}>
-            <circleGeometry args={[0.16, 16]} />
-            <meshStandardMaterial color={colors.primary} emissive={colors.primary} emissiveIntensity={0.3} transparent opacity={0.08} />
+          <mesh ref={rightIrisRef} position={[0.28, 0.28, 0.875]} scale={[0.05, 0.05, 0.02]}>
+            <sphereGeometry args={[1, 16, 16]} />
+            <meshStandardMaterial color={0x3d6b4f} emissive={colors.primary} emissiveIntensity={0.2} roughness={0.15} />
+          </mesh>
+
+          {/* ── Pupils ── */}
+          <mesh ref={leftPupilRef} position={[-0.28, 0.28, 0.89]} scale={[0.022, 0.022, 0.01]}>
+            <sphereGeometry args={[1, 12, 12]} />
+            <meshStandardMaterial color={0x0a0a0a} roughness={0.1} />
+          </mesh>
+          <mesh ref={rightPupilRef} position={[0.28, 0.28, 0.89]} scale={[0.022, 0.022, 0.01]}>
+            <sphereGeometry args={[1, 12, 12]} />
+            <meshStandardMaterial color={0x0a0a0a} roughness={0.1} />
+          </mesh>
+
+          {/* ── Eye highlights (specular catch lights) ── */}
+          <mesh position={[-0.265, 0.295, 0.895]} scale={[0.008, 0.008, 0.005]}>
+            <sphereGeometry args={[1, 8, 8]} />
+            <meshStandardMaterial color={0xffffff} emissive={0xffffff} emissiveIntensity={3} />
+          </mesh>
+          <mesh position={[0.295, 0.295, 0.895]} scale={[0.008, 0.008, 0.005]}>
+            <sphereGeometry args={[1, 8, 8]} />
+            <meshStandardMaterial color={0xffffff} emissive={0xffffff} emissiveIntensity={3} />
+          </mesh>
+
+          {/* ── Upper eyelids ── */}
+          <mesh ref={leftLidRef} position={[-0.28, 0.34, 0.83]} scale={[0.14, 0.03, 0.07]} rotation={[0.2, 0, 0]}>
+            <sphereGeometry args={[1, 16, 8]} />
+            <meshStandardMaterial color={skinTone} roughness={0.5} metalness={0.02} />
+          </mesh>
+          <mesh ref={rightLidRef} position={[0.28, 0.34, 0.83]} scale={[0.14, 0.03, 0.07]} rotation={[0.2, 0, 0]}>
+            <sphereGeometry args={[1, 16, 8]} />
+            <meshStandardMaterial color={skinTone} roughness={0.5} metalness={0.02} />
+          </mesh>
+
+          {/* ── Lower eyelids ── */}
+          <mesh position={[-0.28, 0.22, 0.83]} scale={[0.13, 0.015, 0.06]} rotation={[-0.1, 0, 0]}>
+            <sphereGeometry args={[1, 16, 8]} />
+            <meshStandardMaterial color={skinDark} roughness={0.55} metalness={0.02} />
+          </mesh>
+          <mesh position={[0.28, 0.22, 0.83]} scale={[0.13, 0.015, 0.06]} rotation={[-0.1, 0, 0]}>
+            <sphereGeometry args={[1, 16, 8]} />
+            <meshStandardMaterial color={skinDark} roughness={0.55} metalness={0.02} />
+          </mesh>
+
+          {/* ── Subtle eye glow rings (holographic touch) ── */}
+          <mesh position={[-0.28, 0.28, 0.78]}>
+            <circleGeometry args={[0.14, 24]} />
+            <meshStandardMaterial color={colors.primary} emissive={colors.primary} emissiveIntensity={0.25} transparent opacity={0.06} />
+          </mesh>
+          <mesh position={[0.28, 0.28, 0.78]}>
+            <circleGeometry args={[0.14, 24]} />
+            <meshStandardMaterial color={colors.primary} emissive={colors.primary} emissiveIntensity={0.25} transparent opacity={0.06} />
           </mesh>
         </group>
 
-        <mesh ref={leftBrowRef} position={[-0.33, 0.48, 0.84]} scale={[0.18, 0.025, 0.02]}>
-          <boxGeometry args={[1, 1, 1]} />
-          <meshStandardMaterial color={skinTone.clone().multiplyScalar(0.5)} roughness={0.8} />
+        {/* ── Eyebrows (curved, thicker) ── */}
+        <group>
+          <mesh ref={leftBrowRef} position={[-0.28, 0.52, 0.78]} scale={[0.16, 0.022, 0.03]} rotation={[0.1, 0, 0.08]}>
+            <capsuleGeometry args={[1, 0.4, 4, 12]} />
+            <meshStandardMaterial color={skinTone.clone().multiplyScalar(0.35)} roughness={0.9} />
+          </mesh>
+          <mesh ref={rightBrowRef} position={[0.28, 0.52, 0.78]} scale={[0.16, 0.022, 0.03]} rotation={[0.1, 0, -0.08]}>
+            <capsuleGeometry args={[1, 0.4, 4, 12]} />
+            <meshStandardMaterial color={skinTone.clone().multiplyScalar(0.35)} roughness={0.9} />
+          </mesh>
+        </group>
+
+        {/* ── Upper lip (cupid's bow shape) ── */}
+        <mesh ref={upperLipRef} position={[0, -0.18, 0.85]} scale={[0.16, 0.025, 0.06]}>
+          <sphereGeometry args={[1, 24, 12]} />
+          <meshStandardMaterial color={lipColor} roughness={0.4} metalness={0} />
         </mesh>
-        <mesh ref={rightBrowRef} position={[0.33, 0.48, 0.84]} scale={[0.18, 0.025, 0.02]}>
-          <boxGeometry args={[1, 1, 1]} />
-          <meshStandardMaterial color={skinTone.clone().multiplyScalar(0.5)} roughness={0.8} />
+        {/* ── Philtrum (groove above upper lip) ── */}
+        <mesh position={[0, -0.12, 0.88]} scale={[0.03, 0.05, 0.02]}>
+          <sphereGeometry args={[1, 8, 8]} />
+          <meshStandardMaterial color={skinDark} roughness={0.65} metalness={0.01} transparent opacity={0.4} />
+        </mesh>
+        {/* ── Lower lip (fuller) ── */}
+        <mesh ref={lowerLipRef} position={[0, -0.25, 0.83]} scale={[0.14, 0.032, 0.055]}>
+          <sphereGeometry args={[1, 24, 12]} />
+          <meshStandardMaterial color={lipDark} roughness={0.35} metalness={0} />
+        </mesh>
+        {/* ── Mouth interior (dark cavity) ── */}
+        <mesh position={[0, -0.21, 0.82]} scale={[0.1, 0.01, 0.03]}>
+          <sphereGeometry args={[1, 12, 8]} />
+          <meshStandardMaterial color={0x2a1015} roughness={0.9} />
         </mesh>
 
-        <mesh ref={upperLipRef} position={[0, -0.22, 0.88]} scale={[0.2, 0.035, 0.06]}>
-          <sphereGeometry args={[1, 16, 8]} />
-          <meshStandardMaterial color={new THREE.Color(0xcc7766)} roughness={0.5} metalness={0} />
+        {/* ── Chin ── */}
+        <mesh position={[0, -0.48, 0.6]} scale={[0.2, 0.15, 0.18]}>
+          <sphereGeometry args={[1, 24, 24]} />
+          <meshStandardMaterial {...skinMat} />
         </mesh>
-        <mesh ref={lowerLipRef} position={[0, -0.30, 0.86]} scale={[0.18, 0.04, 0.05]}>
-          <sphereGeometry args={[1, 16, 8]} />
-          <meshStandardMaterial color={new THREE.Color(0xbb6655)} roughness={0.5} metalness={0} />
+        {/* ── Chin dimple (subtle) ── */}
+        <mesh position={[0, -0.48, 0.72]} scale={[0.04, 0.03, 0.02]}>
+          <sphereGeometry args={[1, 8, 8]} />
+          <meshStandardMaterial color={skinDeep} roughness={0.7} transparent opacity={0.3} />
         </mesh>
 
-        <mesh ref={jawRef} position={[0, -0.35, 0.3]} scale={[0.75, 0.55, 0.65]}>
+        {/* ── Jaw / lower face ── */}
+        <mesh ref={jawRef} position={[0, -0.35, 0.25]} scale={[0.7, 0.5, 0.6]}>
           <sphereGeometry args={[1, 32, 16, 0, Math.PI * 2, Math.PI * 0.5, Math.PI * 0.5]} />
           <meshStandardMaterial {...skinMat} />
         </mesh>
 
-        <mesh position={[-0.82, 0.15, 0]} scale={[0.12, 0.18, 0.08]}>
-          <sphereGeometry args={[1, 8, 8]} />
+        {/* ── Jawline definition ── */}
+        <mesh position={[-0.48, -0.28, 0.35]} scale={[0.12, 0.08, 0.15]}>
+          <sphereGeometry args={[1, 16, 16]} />
           <meshStandardMaterial {...skinMat} />
         </mesh>
-        <mesh position={[0.82, 0.15, 0]} scale={[0.12, 0.18, 0.08]}>
-          <sphereGeometry args={[1, 8, 8]} />
+        <mesh position={[0.48, -0.28, 0.35]} scale={[0.12, 0.08, 0.15]}>
+          <sphereGeometry args={[1, 16, 16]} />
           <meshStandardMaterial {...skinMat} />
         </mesh>
 
-        {[[-0.62, 0.05, 0.72], [0.62, 0.05, 0.72]].map(([x, y, z], i) => (
+        {/* ── Ears ── */}
+        <mesh position={[-0.85, 0.15, 0]} scale={[0.08, 0.16, 0.1]} rotation={[0, -0.3, 0.1]}>
+          <sphereGeometry args={[1, 12, 12]} />
+          <meshStandardMaterial color={skinDark} roughness={0.6} metalness={0.02} />
+        </mesh>
+        <mesh position={[0.85, 0.15, 0]} scale={[0.08, 0.16, 0.1]} rotation={[0, 0.3, -0.1]}>
+          <sphereGeometry args={[1, 12, 12]} />
+          <meshStandardMaterial color={skinDark} roughness={0.6} metalness={0.02} />
+        </mesh>
+        {/* ── Inner ear detail ── */}
+        <mesh position={[-0.83, 0.15, 0.02]} scale={[0.04, 0.1, 0.06]}>
+          <sphereGeometry args={[1, 8, 8]} />
+          <meshStandardMaterial color={skinDeep} roughness={0.7} />
+        </mesh>
+        <mesh position={[0.83, 0.15, 0.02]} scale={[0.04, 0.1, 0.06]}>
+          <sphereGeometry args={[1, 8, 8]} />
+          <meshStandardMaterial color={skinDeep} roughness={0.7} />
+        </mesh>
+
+        {/* ── Neck ── */}
+        <mesh ref={neckRef} position={[0, -0.72, -0.05]} scale={[0.28, 0.3, 0.22]}>
+          <cylinderGeometry args={[1, 0.9, 1, 24]} />
+          <meshStandardMaterial color={skinDark} roughness={0.6} metalness={0.02} />
+        </mesh>
+
+        {/* ── Holographic overlay (translucent shell) ── */}
+        <mesh position={[0, 0.08, 0]} scale={[1, 1.08, 1]}>
+          <sphereGeometry args={[0.9, 48, 48]} />
+          <meshStandardMaterial {...holoOverlay} />
+        </mesh>
+
+        {/* ── Scan line ── */}
+        <mesh ref={scanRef} position={[0, 0, 0.9]}>
+          <planeGeometry args={[1.8, 0.015]} />
+          <meshStandardMaterial color={colors.primary} emissive={colors.primary} emissiveIntensity={2} transparent opacity={0.15} />
+        </mesh>
+
+        {/* ── Facial tech lines (holographic accent) ── */}
+        {[[-0.55, 0.08, 0.7], [0.55, 0.08, 0.7]].map(([x, y, z], i) => (
           <group key={i} position={[x, y, z]}>
             <mesh>
-              <boxGeometry args={[0.12, 0.012, 0.008]} />
-              <meshStandardMaterial color={colors.primary} emissive={colors.primary} emissiveIntensity={2.5} />
+              <boxGeometry args={[0.1, 0.008, 0.005]} />
+              <meshStandardMaterial color={colors.primary} emissive={colors.primary} emissiveIntensity={2} />
             </mesh>
-            <mesh position={[0, -0.03, 0]}>
-              <boxGeometry args={[0.06, 0.006, 0.008]} />
-              <meshStandardMaterial color={colors.primary} emissive={colors.primary} emissiveIntensity={1.5} transparent opacity={0.5} />
+            <mesh position={[0, -0.025, 0]}>
+              <boxGeometry args={[0.05, 0.004, 0.005]} />
+              <meshStandardMaterial color={colors.primary} emissive={colors.primary} emissiveIntensity={1.2} transparent opacity={0.4} />
             </mesh>
           </group>
         ))}
 
-        <mesh position={[0, 0.65, 0.7]}>
-          <boxGeometry args={[0.2, 0.008, 0.008]} />
-          <meshStandardMaterial color={colors.secondary} emissive={colors.secondary} emissiveIntensity={2} transparent opacity={0.6} />
+        {/* ── Forehead data line ── */}
+        <mesh position={[0, 0.62, 0.65]}>
+          <boxGeometry args={[0.15, 0.005, 0.005]} />
+          <meshStandardMaterial color={colors.secondary} emissive={colors.secondary} emissiveIntensity={1.8} transparent opacity={0.5} />
         </mesh>
-        <mesh position={[-0.06, 0.58, 0.75]}>
-          <boxGeometry args={[0.08, 0.006, 0.008]} />
-          <meshStandardMaterial color={colors.secondary} emissive={colors.secondary} emissiveIntensity={1.5} transparent opacity={0.4} />
+        <mesh position={[-0.05, 0.56, 0.7]}>
+          <boxGeometry args={[0.06, 0.004, 0.005]} />
+          <meshStandardMaterial color={colors.secondary} emissive={colors.secondary} emissiveIntensity={1.2} transparent opacity={0.3} />
         </mesh>
-        <mesh position={[0.06, 0.58, 0.75]}>
-          <boxGeometry args={[0.08, 0.006, 0.008]} />
-          <meshStandardMaterial color={colors.secondary} emissive={colors.secondary} emissiveIntensity={1.5} transparent opacity={0.4} />
+        <mesh position={[0.05, 0.56, 0.7]}>
+          <boxGeometry args={[0.06, 0.004, 0.005]} />
+          <meshStandardMaterial color={colors.secondary} emissive={colors.secondary} emissiveIntensity={1.2} transparent opacity={0.3} />
         </mesh>
       </group>
 
@@ -485,11 +687,12 @@ export default function Avatar3D({ emotion, isSpeaking, bpm, panelMode, panelAva
         >
           <color attach="background" args={["#000408"]} />
           <fog attach="fog" args={["#000408", 12, 40]} />
-          <ambientLight intensity={0.25} />
+          <ambientLight intensity={0.3} />
           <pointLight position={[0, 5, 8]} intensity={3} color={0x00d4ff} />
           <pointLight position={[-6, 3, 5]} intensity={2} color={0x7700ff} />
           <pointLight position={[6, 3, 5]} intensity={2} color={0xff0044} />
-          <pointLight position={[0, -2, 6]} intensity={1} color={0xffeedd} />
+          <pointLight position={[0, -2, 6]} intensity={1.5} color={0xffeedd} />
+          <pointLight position={[0, 2, 10]} intensity={1} color={0xffffff} />
           <Stars radius={60} depth={60} count={3000} factor={2.5} fade speed={0.5} />
           <NeuralNetwork bpm={bpm} color={0x003366} />
 
@@ -541,31 +744,31 @@ export default function Avatar3D({ emotion, isSpeaking, bpm, panelMode, panelAva
       >
         <color attach="background" args={["#000408"]} />
         <fog attach="fog" args={["#000408", 10, 35]} />
-        <ambientLight intensity={0.2} />
+        <ambientLight intensity={0.25} />
         <pointLight position={[4, 4, 6]} intensity={3} color={colors.primary} />
-        <pointLight position={[-4, 4, 6]} intensity={2} color={0x7700ff} />
-        <pointLight position={[0, -4, 4]} intensity={1.5} color={0xff0044} />
-        <pointLight position={[0, 0, 8]} intensity={0.8} color={0xffeedd} />
-        <Stars radius={60} depth={60} count={4000} factor={3} fade speed={0.4} />
-        <NeuralNetwork bpm={bpm} color={colors.primary} />
-        <DNAHelix color={colors.primary} />
-        <Float speed={1.2} rotationIntensity={0.08} floatIntensity={0.25}>
-          <HumanHead emotion={emotion} isSpeaking={isSpeaking} bpm={bpm} isActive={true} mouthOpenness={mouthOpenness} />
+        <pointLight position={[-4, 2, 4]} intensity={2} color={0x7700ff} />
+        <pointLight position={[0, -2, 5]} intensity={1.5} color={0xffeedd} />
+        <pointLight position={[0, 3, 8]} intensity={1} color={0xffffff} />
+        <Stars radius={50} depth={50} count={2000} factor={2} fade speed={0.4} />
+        <Float speed={0.6} rotationIntensity={0.04} floatIntensity={0.08}>
+          <HumanHead
+            emotion={emotion}
+            isSpeaking={isSpeaking}
+            bpm={bpm}
+            isActive={true}
+            mouthOpenness={mouthOpenness}
+          />
         </Float>
-        <HoloGrid color={colors.primary} />
-        <Nebula color={colors.primary} />
+        <NeuralNetwork bpm={bpm} color={colors.secondary} />
+        <DNAHelix color={colors.secondary} />
+        <HoloGrid color={colors.secondary} />
+        <Nebula color={colors.secondary} />
       </Canvas>
 
       {isSpeaking && spokenText && (
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 max-w-[85%] z-20">
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 max-w-[90%] z-20">
           <div className="bg-black/85 border border-cyan-500/40 rounded-xl px-5 py-3 backdrop-blur-md"
             style={{ boxShadow: "0 0 25px rgba(0,212,255,0.15)" }}>
-            <div className="flex items-center gap-2 mb-1">
-              <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-              <span className="text-[10px] font-mono text-cyan-400 uppercase tracking-[0.2em] font-bold">
-                Interviewer
-              </span>
-            </div>
             <p className="text-sm font-mono text-cyan-100 leading-relaxed">{spokenText}</p>
           </div>
         </div>
