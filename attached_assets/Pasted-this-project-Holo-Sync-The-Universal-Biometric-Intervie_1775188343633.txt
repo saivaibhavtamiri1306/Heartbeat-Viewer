@@ -1,0 +1,56 @@
+this project "Holo-Sync: The Universal Biometric Interviewer."
+
+The Ultimate Problem Statement
+Current interview platforms are static, one-size-fits-all text bots. How might we build a browser-based, universal 3D interview ecosystem that uses invisible biometric webcam tracking to dynamically adapt its emotional intelligence, testing candidates across diverse fields (from UPSC to Software Engineering) with real-time psychological feedback and stress-induced scenario generation?
+
+The Core Flow (How it works on screen):
+1. The "Universal Matrix" Onboarding
+When the user logs in, they don't just click "Start." They see a massive, sleek dropdown menu.
+
+They select their exact domain: UPSC Civil Services, Software Engineering (Full-Stack/Backend), National Defence Academy (NDA/SSB), Medical, or Investment Banking.
+
+The Gemini backend instantly pulls the exact syllabus, current affairs, and psychological profiling required for that specific role.
+
+2. The 3D Empathetic Avatar (The Core Magic)
+The interview doesn't happen with text. A hyper-realistic 3D MetaHuman Face (built with Three.js/WebGL) appears on screen. Its lips sync perfectly with the AI's generated voice.
+
+The Biometric Trigger: Your webcam is silently running the rPPG algorithm, reading the microscopic color changes in the user's face to track their heartbeat.
+
+The AI Empathy: If the user is answering a tough UPSC governance question and their heart rate spikes from 75 to 110 BPM, the 3D AI actually interrupts them gracefully. It physically softens its facial expression, smiles, and says: "Tension enduku paduthunnav? Take a deep breath. Stress theeskokunda cool ga answer chey. Let's restart the answer." It proves the AI actually cares about their physical state.
+
+The "Inka Extra" Features (The Hackathon Killers)
+Pina unnavi cover chesam. Now, here are three completely new, highly advanced features to add to the app that will absolutely destroy the competition:
+
+Feature A: "Cross-Fire" Panel Mode (For UPSC/Defense)
+The Concept: Standard software interviews have one HR. But UPSC, NDA, or high-level government interviews have a Panel of 3 to 5 people.
+
+The Magic: If the user selects "UPSC" or "Defense", the UI changes. Instead of one 3D face, three different 3D avatars appear on the screen.
+
+The Stress Test: Gemini controls all three. They simulate a "hostile" interview. Avatar 1 asks a question. While the user is answering, Avatar 2 suddenly interrupts and contradicts them. Avatar 3 asks a completely unrelated current-affairs question. The webcam monitors the user's eye-tracking and heart rate to see if they lose their temper or get confused under multi-directional pressure.
+
+Feature B: The Real-Time "Bullshit Detector" (Dynamic Deep-Dive)
+The Concept: Candidates often memorize buzzwords they don't understand.
+
+The Magic: Gemini is actively listening to the audio. If a Software Engineering candidate says, "I used Three.js to optimize the 3D rendering pipeline," the AI instantly detects a "high-level claim."
+
+It immediately pauses its planned script and dynamically generates a hyper-specific drill-down question: "Oh, you optimized the pipeline? Explain exactly how you handled the memory leaks with WebGL geometries in that project." If the candidate's heart rate spikes and they stutter, the dashboard logs a "Knowledge Bluff Detected."
+
+Feature C: "Mirror-Neuron" Posture Correction (Post-Interview Magic)
+The Concept: Telling someone "you slouched" is useless. Showing them is powerful.
+
+The Magic: After the interview is done, the app generates a replay of their video. But using Gen-AI video processing, it creates a side-by-side split screen. On the left is their actual video (slouching, rubbing their neck). On the right is an AI-corrected deepfake of themselves sitting perfectly straight, making strong eye contact, and looking confident. It physically shows them the "Aura" they could have projected if they controlled their nerves.
+
+How to Demo This to Judges
+To win, your demo needs a narrative. You sit down, open the app, and say:
+"I am applying for a high-pressure role. I will now intentionally act nervous."
+You start breathing heavily and looking away from the camera. Within 15 seconds, the 3D avatar on the screen stops, looks at you with concern, and says, "Your heart rate just crossed 110. Calm down, take a sip of water, and let's try again."
+
+The tech stack to pull this off:
+
+Frontend: React.js + Three.js (for the 3D Avatar and UI).
+
+Backend: Node.js processing the rPPG (Heart Rate) and WebGazer (Eye Tracking).
+
+Brain: Gemini 1.5 Pro Multimodal API (processing the video context, audio transcript, and biometric data to generate the 3D avatar's dialogue).
+
+Idi purely next-generation project. To help you visualize the complex logic routing behind this, here is a simulator showing how the AI decides whether to use the "Empathy Mode," the "Bullshit Detector," or the "Cross-Fire Panel" based on the exact job role and live heartbeat.

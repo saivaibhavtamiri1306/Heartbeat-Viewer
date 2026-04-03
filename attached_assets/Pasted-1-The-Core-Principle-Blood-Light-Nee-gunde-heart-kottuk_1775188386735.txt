@@ -1,0 +1,26 @@
+1. The Core Principle: Blood & Light
+Nee gunde (heart) kottukunnappudu, raktham (blood) face loki pump avuthundi. Raktham lo unde hemoglobin green light ni ekkuvaga absorb chestundi.
+
+So, gunde kottukunna prathi saari, face meedha unde skin lo green light absorption peruguthundi (ante skin slightly darker ga avuthundi). Gunde relax ayinappudu, absorption tagguthundi (skin slightly lighter ga avuthundi). Ee changes mana kanti ki kanipinchavu, kani webcam sensor ki kanipisthayi!
+
+2. Ee Code lo em jaruguthundi?
+Mana App.jsx lo raasina logic (lines 200-280) step-by-step ga ila pani chestundi:
+
+Video Capture: First, canvas ni use chesi live webcam video feed nunchi frames theeskuntam.
+
+Region of Interest (ROI): Face mottam kaakunda, forehead (nuduru) leka cheek (bugga) area ni select chestundi. Ee area lo capillaries (chinna raktha naalaalu) skin surface ki daggara ga untayi.
+
+Green Channel Extraction: Prathi frame lo, aa selected area loni pixels nunchi kevalam Green color (G value in RGB) ni matrame bayataki theesi, average chestundi. Endukante green light absorption ye mana pulse ni isthundi.
+
+Data Collection over Time: Ee green values ni oka array (rppgDataRef.current.values) lo save chesthundi (for about 5 seconds). Idi oka wave (signal) ni create chestundi.
+
+Smoothing & Peak Detection: Aa wave lo chala noise untundi (nuvvu thala oopina, light maarina). Anduke "Moving Average" (line 254) ane math formula use chesi aa wave ni smooth chestham. Tarvata, aa smooth wave lo "Peaks" (ekkuva green absorption unna points) ni count chestham (line 260).
+
+BPM Calculation: 5 seconds lo enni peaks vachayo count chesi, daanni 60 seconds ki multiply chesthe, mana Beats Per Minute (BPM) vasthundi (line 268)!
+
+Mana implementation lo chinna "Catch" (Hack):
+Pure rPPG Python lo ayithe accurate ga chestundi, kani browser lo (JavaScript) lighting conditions batti chala noise vasthundi. Anduke, mana code lo (lines 271-273) chinna "hack" vadanu:
+
+Oka vela calculated BPM mari ekkuva (like 130+) unte, adi mostly noise ani artham. Appudu daanni human range (60-120) loki filter chesthanu.
+
+"Hold to Panic" button nokkithe, ee motham calculation ni bypass chesi direct ga BPM ni 115 ki jump chesthanu, so demo ivvadaniki easy ga untundi!
