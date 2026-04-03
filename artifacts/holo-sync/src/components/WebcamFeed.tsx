@@ -122,7 +122,7 @@ export default function WebcamFeed({
       ctx.restore();
     });
 
-    // ── Green ROI box on forehead — solid dark green like webcam-pulse-detector
+    // ── Green ROI box on forehead — small semi-transparent green (habom2310 style)
     if (foreheadBox && foreheadBox.w > 5 && foreheadBox.h > 3) {
       const rx = foreheadBox.x * scaleToFill + offX;
       const ry = foreheadBox.y * scaleToFill + offY;
@@ -131,10 +131,10 @@ export default function WebcamFeed({
       const mx = dw - rx - rw;
 
       ctx.save();
-      ctx.fillStyle = "#003300";
+      ctx.fillStyle = "rgba(0, 255, 0, 0.25)";
       ctx.fillRect(mx, ry, rw, rh);
-      ctx.strokeStyle = "#005500";
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = "rgba(0, 255, 0, 0.6)";
+      ctx.lineWidth = 1;
       ctx.strokeRect(mx, ry, rw, rh);
       ctx.restore();
     }
