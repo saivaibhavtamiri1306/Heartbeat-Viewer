@@ -32,12 +32,42 @@ const FACE_OVAL = [
   400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109
 ];
 
-// Forehead landmarks (above eyebrows, below hairline)
-const FOREHEAD_LM = [10,338,297,332,284,9,8,107,66,105,63,70,46,53,52,65,55,193,168,6,197,195];
-
 // Cheek landmarks (left + right)
 const CHEEK_L = [234,93,132,58,172,136,150,149];
 const CHEEK_R = [454,323,361,288,397,365,379,378];
+
+// Forehead: computed anatomically (NOT from a bad landmark list)
+// landmark 10 = top of forehead; 107/66/105 = left brow top; 336/296/334 = right brow top
+// Width anchors: 54/103/67/109 = left forehead edge; 284/332/297/338 = right forehead edge
+function computeForeheadBox(
+  face: {x:number;y:number;z:number}[], vw: number, vh: number
+): FaceBox | null {
+  if (face.length < 400) return null;
+
+  // Top of forehead
+  const topY = face[10].y * vh;
+
+  // Bottom = top of eyebrows (take the minimum y = highest point of each brow)
+  const leftBrowY  = Math.min(face[107].y, face[66].y, face[105].y) * vh;
+  const rightBrowY = Math.min(face[336].y, face[296].y, face[334].y) * vh;
+  const browY = Math.min(leftBrowY, rightBrowY);
+
+  const foreH = browY - topY;
+  if (foreH < 6) return null; // face too small / not visible
+
+  // Width: left and right forehead edges
+  const leftX  = Math.min(face[54].x, face[103].x, face[67].x, face[109].x) * vw;
+  const rightX = Math.max(face[284].x, face[332].x, face[297].x, face[338].x) * vw;
+
+  // Inset 12% on each side to stay on skin (avoid hairline/temples)
+  const inset = (rightX - leftX) * 0.12;
+  return {
+    x: leftX  + inset,
+    y: topY   + foreH * 0.12,   // small top margin below hairline
+    w: (rightX - leftX) - 2 * inset,
+    h: foreH  * 0.72,           // stop before eyebrows
+  };
+}
 
 // Key display keypoints (eyes, nose, mouth corners)
 const DISPLAY_KP = [33, 133, 362, 263, 1, 61, 291, 199, 4];
@@ -204,7 +234,7 @@ export function useFaceDetection(videoRef: React.RefObject<HTMLVideoElement|null
         const face = r.faceLandmarks?.[0];
         if (face && face.length > 0) {
           rawBox  = lmBox(face, FACE_OVAL, vw, vh, 5, 5);
-          rawFore = lmBox(face, FOREHEAD_LM, vw, vh, 4, 6);
+          rawFore = computeForeheadBox(face, vw, vh);
           const cheekL = lmBox(face, CHEEK_L, vw, vh, 5, 5);
           const cheekR = lmBox(face, CHEEK_R, vw, vh, 5, 5);
           rawCheek = cheekL && cheekR ? {
