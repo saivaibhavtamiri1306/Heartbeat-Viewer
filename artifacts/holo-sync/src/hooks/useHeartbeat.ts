@@ -1,25 +1,21 @@
 /**
- * useHeartbeat — rPPG heart rate via webcam (v2 — accuracy rewrite)
+ * useHeartbeat — rPPG heart rate via webcam (v3 — research-grade rewrite)
  *
- * Pipeline:
- *  1. Multi-ROI face sampling (forehead + cheeks + face fallback)
- *  2. 30Hz fixed resampling via linear interpolation
- *  3. Windowed POS normalization (Wang 2017, 1.6s sub-windows)
- *  4. True smoothness-prior detrending (tridiagonal solver, λ=300)
- *  5. 2nd-order Butterworth bandpass 0.7–4.0 Hz via cascaded biquads + filtfilt
- *  6. Triple estimation: adaptive peak counting + Welch FFT + autocorrelation
- *  7. SNR-weighted consensus with responsive EMA
+ * Based on findings from:
+ *  - Wang et al. 2017 "Algorithmic Principles of Remote PPG" (POS algorithm)
+ *  - Tarvainen et al. 2002 "Advanced Methods for HRV Analysis" (smoothness-prior detrending, λ=10)
+ *  - pyVHR benchmark framework (signal processing pipeline)
+ *  - prouast/heartbeat-js (ROI + POS reference)
  *
- * Key changes from v1:
- *  - NO pre-smoothing before POS (was killing pulse signal)
- *  - Real smoothness-prior detrending (tridiagonal, not moving average)
- *  - 2nd-order Butterworth (better stopband rejection)
- *  - Wider passband: 0.7–4.0 Hz (42–240 BPM theoretical)
- *  - Welch's method for FFT (lower variance)
- *  - SNR-based signal selection (POS vs Green)
- *  - Faster calibration: WIN=180 (~6s)
- *  - Updates every 3 frames instead of 5
- *  - More responsive EMA (α=0.35)
+ * Key v3 fixes:
+ *  - Bandpass narrowed to 0.67–2.5 Hz (40–150 BPM) — eliminates harmonics
+ *  - Explicit harmonic rejection in FFT (checks f/2 subharmonic)
+ *  - Lambda reduced from 300 → 10 (correct per Tarvainen 2002 at 30fps)
+ *  - 4th-order Butterworth (two cascaded 2nd-order biquads)
+ *  - Larger Welch segments (256 samples) for better frequency resolution
+ *  - Tukey window instead of Hann for lower spectral leakage
+ *  - Median-of-5 output smoothing to reject transient spikes
+ *  - Stricter peak detection (sigma * 0.4 threshold)
  */
 import { useRef, useState, useEffect, useCallback } from "react";
 import type { FaceBox } from "./useFaceDetection";
@@ -39,15 +35,16 @@ export interface HeartbeatData {
 }
 
 const FS          = 30;
-const WIN         = 180;     // ~6s at 30Hz — faster calibration
-const BPM_LO      = 42;
-const BPM_HI      = 180;
-const BP_LO       = 0.7;    // Hz — slightly wider for resting HR
-const BP_HI       = 4.0;    // Hz — wider passband for exercise/stress
-const SUB_W       = 48;     // ceil(1.6 * 30) = 48 samples per POS sub-window
-const EMA_ALPHA   = 0.35;   // More responsive
-const AGREE_THR   = 8;      // BPM agreement threshold between methods
-const DETREND_LAM = 300;    // Smoothness-prior lambda
+const WIN         = 300;     // 10s at 30Hz — longer window = better frequency resolution
+const BPM_LO      = 40;
+const BPM_HI      = 150;    // Narrowed from 180 — no one has 150+ resting/interview HR
+const BP_LO       = BPM_LO / 60;   // 0.667 Hz
+const BP_HI       = BPM_HI / 60;   // 2.5 Hz — critical: cuts 2nd harmonic of 75+ BPM
+const SUB_W       = 48;     // 1.6s POS sub-window per Wang 2017
+const EMA_ALPHA   = 0.15;   // Slower EMA for stability (was 0.35)
+const AGREE_THR   = 10;     // BPM agreement threshold
+const DETREND_LAM = 10;     // Tarvainen 2002: λ=10 at 30fps
+const HARMONIC_CHECK_RATIO = 0.45; // if subharmonic power > 45% of harmonic, prefer fundamental
 
 const mean = (a: number[]) => a.reduce((s, v) => s + v, 0) / (a.length || 1);
 const std  = (a: number[]) => {
@@ -59,55 +56,36 @@ const median = (a: number[]) => {
   return s.length%2 ? s[m] : (s[m-1]+s[m])/2;
 };
 
-// ─── True smoothness-prior detrending (tridiagonal solver) ──────────────────
-// Solves: (I + λ² * D₂ᵀ D₂) * trend = signal, then returns signal - trend
-// D₂ is the second-order difference matrix
-// Uses Thomas algorithm for O(n) tridiagonal solution
+// ─── Smoothness-prior detrending (Tarvainen et al. 2002) ─────────────────
+// Solves (I + λ² * D₂ᵀD₂) * trend = signal via Gauss-Seidel
 function detrendSP(sig: number[], lambda: number): number[] {
   const n = sig.length;
   if (n < 5) return sig;
-
   const l2 = lambda * lambda;
 
-  // Build tridiagonal system: (I + λ² * D₂ᵀ * D₂)
-  // D₂ᵀ * D₂ is pentadiagonal, but we approximate with the dominant tridiagonal
-  // For better accuracy, we solve iteratively
-
-  // Direct approach: use the full pentadiagonal structure
-  // Diagonal: d[i] = 1 + λ²*(contributions from D₂ᵀD₂)
   const d = new Float64Array(n);
-  const dl = new Float64Array(n); // lower diagonal
-  const du = new Float64Array(n); // upper diagonal
-  const dll = new Float64Array(n); // 2nd lower
-  const duu = new Float64Array(n); // 2nd upper
+  const dl = new Float64Array(n);
+  const du = new Float64Array(n);
+  const dll = new Float64Array(n);
+  const duu = new Float64Array(n);
 
-  // D₂ᵀD₂ pentadiagonal entries
   for (let i = 0; i < n; i++) {
-    let v = 1; // identity
+    let v = 1;
     if (i === 0 || i === n-1) v += l2;
     else if (i === 1 || i === n-2) v += 5 * l2;
     else v += 6 * l2;
     d[i] = v;
   }
   for (let i = 1; i < n; i++) {
-    let v = 0;
-    if (i === 1 || i === n-1) v = -2 * l2;
-    else v = -4 * l2;
-    dl[i] = v;
-    du[i-1] = v;
+    const v = (i === 1 || i === n-1) ? -2 * l2 : -4 * l2;
+    dl[i] = v; du[i-1] = v;
   }
-  for (let i = 2; i < n; i++) {
-    dll[i] = l2;
-    duu[i-2] = l2;
-  }
+  for (let i = 2; i < n; i++) { dll[i] = l2; duu[i-2] = l2; }
 
-  // Solve pentadiagonal system using LU decomposition (simplified)
-  // For practical purposes, use iterative Gauss-Seidel (fast convergence for this matrix)
   const trend = new Float64Array(n);
   for (let i = 0; i < n; i++) trend[i] = sig[i];
 
-  // 15 iterations of Gauss-Seidel is sufficient for convergence
-  for (let iter = 0; iter < 15; iter++) {
+  for (let iter = 0; iter < 20; iter++) {
     for (let i = 0; i < n; i++) {
       let rhs = sig[i];
       if (i >= 1) rhs -= dl[i] * trend[i-1];
@@ -117,24 +95,18 @@ function detrendSP(sig: number[], lambda: number): number[] {
       trend[i] = rhs / d[i];
     }
   }
-
   return sig.map((v, i) => v - trend[i]);
 }
 
-// ─── 2nd-order Butterworth via cascaded biquad sections ─────────────────────
-// Each biquad: y[n] = (b0*x[n] + b1*x[n-1] + b2*x[n-2] - a1*y[n-1] - a2*y[n-2]) / a0
+// ─── 4th-order Butterworth via two cascaded 2nd-order biquad sections ────
 type Biquad = { b0: number; b1: number; b2: number; a0: number; a1: number; a2: number };
 
 function bw2HP(fc: number, fs: number): Biquad {
   const w0 = 2 * Math.PI * fc / fs;
-  const alpha = Math.sin(w0) / (2 * Math.SQRT2); // Q = √2/2 for Butterworth
+  const alpha = Math.sin(w0) / (2 * Math.SQRT2);
   return {
-    b0: (1 + Math.cos(w0)) / 2,
-    b1: -(1 + Math.cos(w0)),
-    b2: (1 + Math.cos(w0)) / 2,
-    a0: 1 + alpha,
-    a1: -2 * Math.cos(w0),
-    a2: 1 - alpha,
+    b0: (1 + Math.cos(w0)) / 2, b1: -(1 + Math.cos(w0)), b2: (1 + Math.cos(w0)) / 2,
+    a0: 1 + alpha, a1: -2 * Math.cos(w0), a2: 1 - alpha,
   };
 }
 
@@ -142,12 +114,8 @@ function bw2LP(fc: number, fs: number): Biquad {
   const w0 = 2 * Math.PI * fc / fs;
   const alpha = Math.sin(w0) / (2 * Math.SQRT2);
   return {
-    b0: (1 - Math.cos(w0)) / 2,
-    b1: 1 - Math.cos(w0),
-    b2: (1 - Math.cos(w0)) / 2,
-    a0: 1 + alpha,
-    a1: -2 * Math.cos(w0),
-    a2: 1 - alpha,
+    b0: (1 - Math.cos(w0)) / 2, b1: 1 - Math.cos(w0), b2: (1 - Math.cos(w0)) / 2,
+    a0: 1 + alpha, a1: -2 * Math.cos(w0), a2: 1 - alpha,
   };
 }
 
@@ -175,13 +143,17 @@ function filtfilt(sig: number[], bq: Biquad): number[] {
   return r.slice(pad, pad + n);
 }
 
-function bandpass(sig: number[], lo: number, hi: number, fs: number): number[] {
+function bandpass4(sig: number[], lo: number, hi: number, fs: number): number[] {
   const hp = bw2HP(lo, fs);
   const lp = bw2LP(hi, fs);
-  return filtfilt(filtfilt(sig, hp), lp);
+  let out = filtfilt(sig, hp);
+  out = filtfilt(out, hp);
+  out = filtfilt(out, lp);
+  out = filtfilt(out, lp);
+  return out;
 }
 
-// ─── FFT (Cooley-Tukey) ─────────────────────────────────────────────────────
+// ─── FFT (Cooley-Tukey radix-2) ──────────────────────────────────────────
 function fftMag(sig: number[]): Float64Array {
   const n = sig.length; let sz = 1; while (sz < n) sz <<= 1;
   const re = new Float64Array(sz), im = new Float64Array(sz);
@@ -209,7 +181,20 @@ function fftMag(sig: number[]): Float64Array {
   return m;
 }
 
-// ─── Windowed POS (Wang 2017) — NO pre-smoothing ────────────────────────────
+// ─── Tukey window (α=0.25) — better sidelobe suppression than Hann ──────
+function tukeyWindow(n: number, alpha = 0.25): Float64Array {
+  const w = new Float64Array(n);
+  const lower = alpha * n / 2;
+  const upper = n - lower;
+  for (let i = 0; i < n; i++) {
+    if (i < lower) w[i] = 0.5 * (1 - Math.cos(2 * Math.PI * i / (alpha * n)));
+    else if (i > upper) w[i] = 0.5 * (1 - Math.cos(2 * Math.PI * (n - i) / (alpha * n)));
+    else w[i] = 1.0;
+  }
+  return w;
+}
+
+// ─── Windowed POS (Wang 2017) ────────────────────────────────────────────
 function windowedPOS(R: number[], G: number[], B: number[]): number[] {
   const n = R.length;
   const H = new Float64Array(n);
@@ -239,38 +224,117 @@ function windowedPOS(R: number[], G: number[], B: number[]): number[] {
   return Array.from(H);
 }
 
-// ─── METHOD 1: Adaptive peak counting ───────────────────────────────────────
+// ─── METHOD 1: Welch FFT with harmonic rejection ────────────────────────
+function welchBPM(sig: number[], fs: number): { bpm: number; snr: number; power: Float64Array; freqRes: number } {
+  const s2 = std(sig);
+  if (s2 < 1e-10) return { bpm: 0, snr: 0, power: new Float64Array(0), freqRes: 0 };
+  const norm = sig.map(v => v / s2);
+
+  const segLen = Math.min(norm.length, 256);
+  const overlap = Math.floor(segLen * 0.75);
+  const step = segLen - overlap;
+  const nSegs = Math.max(1, Math.floor((norm.length - segLen) / step) + 1);
+
+  let sz = 1; while (sz < segLen * 4) sz <<= 1;
+  const avgMag = new Float64Array(sz >> 1);
+  const win = tukeyWindow(segLen, 0.25);
+
+  for (let s = 0; s < nSegs; s++) {
+    const start = s * step;
+    const seg = norm.slice(start, start + segLen);
+    const w = seg.map((v, i) => v * win[i]);
+    const padded = [...w, ...new Array(sz - segLen).fill(0)];
+    const m = fftMag(padded);
+    for (let k = 0; k < avgMag.length; k++) avgMag[k] += m[k] * m[k];
+  }
+  for (let k = 0; k < avgMag.length; k++) avgMag[k] = Math.sqrt(avgMag[k] / nSegs);
+
+  const fr = fs / (avgMag.length * 2);
+  const lo = Math.max(1, Math.floor(BP_LO / fr));
+  const hi = Math.min(avgMag.length - 2, Math.ceil(BP_HI / fr));
+
+  let peak = 0, pb = lo, bsum = 0;
+  for (let k = lo; k <= hi; k++) { bsum += avgMag[k]; if (avgMag[k] > peak) { peak = avgMag[k]; pb = k; } }
+  const bmean = bsum / Math.max(1, hi - lo + 1);
+  const snr = bmean > 0 ? peak / bmean : 0;
+
+  let freq = pb * fr;
+  if (pb > lo && pb < hi) {
+    const al = avgMag[pb-1], bm2 = avgMag[pb], ar = avgMag[pb+1];
+    const d = al - 2*bm2 + ar;
+    if (Math.abs(d) > 1e-12) freq = (pb + 0.5 * (al - ar) / d) * fr;
+  }
+
+  // ── Harmonic rejection ──
+  // If the detected frequency seems high (>1.2 Hz = 72 BPM), check if f/2 has a peak
+  // This catches the very common case where the 2nd harmonic is stronger than the fundamental
+  if (freq > 1.2) {
+    const halfFreq = freq / 2;
+    if (halfFreq >= BP_LO) {
+      const halfBin = Math.round(halfFreq / fr);
+      if (halfBin >= lo && halfBin <= hi) {
+        const halfPower = avgMag[halfBin];
+        if (halfPower > peak * HARMONIC_CHECK_RATIO) {
+          freq = halfBin * fr;
+          if (halfBin > lo && halfBin < hi) {
+            const al2 = avgMag[halfBin-1], bm3 = avgMag[halfBin], ar2 = avgMag[halfBin+1];
+            const d2 = al2 - 2*bm3 + ar2;
+            if (Math.abs(d2) > 1e-12) freq = (halfBin + 0.5 * (al2 - ar2) / d2) * fr;
+          }
+        }
+      }
+    }
+  }
+
+  // Also check f/3 for triple harmonic
+  if (freq > 1.8) {
+    const thirdFreq = freq / 3;
+    if (thirdFreq >= BP_LO) {
+      const thirdBin = Math.round(thirdFreq / fr);
+      if (thirdBin >= lo && thirdBin <= hi) {
+        const thirdPower = avgMag[thirdBin];
+        if (thirdPower > peak * HARMONIC_CHECK_RATIO) {
+          freq = thirdBin * fr;
+          if (thirdBin > lo && thirdBin < hi) {
+            const al3 = avgMag[thirdBin-1], bm4 = avgMag[thirdBin], ar3 = avgMag[thirdBin+1];
+            const d3 = al3 - 2*bm4 + ar3;
+            if (Math.abs(d3) > 1e-12) freq = (thirdBin + 0.5 * (al3 - ar3) / d3) * fr;
+          }
+        }
+      }
+    }
+  }
+
+  return { bpm: Math.round(clamp(freq * 60, BPM_LO, BPM_HI)), snr, power: avgMag, freqRes: fr };
+}
+
+// ─── METHOD 2: Adaptive peak counting with strict thresholding ──────────
 function peakCountBPM(sig: number[], fs: number): { bpm: number; conf: number } {
   const n = sig.length;
-  if (n < fs * 2) return { bpm: 0, conf: 0 };
+  if (n < fs * 3) return { bpm: 0, conf: 0 };
 
   const sigma = std(sig);
-  const adaptive_thr = sigma * 0.25;
+  const adaptive_thr = sigma * 0.4;
+
+  const minDist = Math.floor(fs * 60 / BPM_HI);
   const peaks: number[] = [];
 
   for (let i = 2; i < n - 2; i++) {
     if (sig[i] > sig[i-1] && sig[i] > sig[i+1] &&
         sig[i] > sig[i-2] && sig[i] > sig[i+2] &&
         sig[i] > adaptive_thr) {
-      peaks.push(i);
+      if (peaks.length === 0 || i - peaks[peaks.length-1] >= minDist) {
+        peaks.push(i);
+      } else if (sig[i] > sig[peaks[peaks.length-1]]) {
+        peaks[peaks.length-1] = i;
+      }
     }
   }
   if (peaks.length < 3) return { bpm: 0, conf: 0 };
 
-  const minDist = Math.floor(fs * 60 / BPM_HI);
-  const filtered: number[] = [peaks[0]];
-  for (let i = 1; i < peaks.length; i++) {
-    if (peaks[i] - filtered[filtered.length-1] >= minDist) {
-      filtered.push(peaks[i]);
-    } else if (sig[peaks[i]] > sig[filtered[filtered.length-1]]) {
-      filtered[filtered.length-1] = peaks[i];
-    }
-  }
-  if (filtered.length < 3) return { bpm: 0, conf: 0 };
-
   const ibis: number[] = [];
-  for (let i = 1; i < filtered.length; i++) {
-    const ibi = (filtered[i] - filtered[i-1]) / fs;
+  for (let i = 1; i < peaks.length; i++) {
+    const ibi = (peaks[i] - peaks[i-1]) / fs;
     const bpm = 60 / ibi;
     if (bpm >= BPM_LO && bpm <= BPM_HI) ibis.push(ibi);
   }
@@ -291,71 +355,7 @@ function peakCountBPM(sig: number[], fs: number): { bpm: number; conf: number } 
   return { bpm: Math.round(60 / median(valid)), conf };
 }
 
-// ─── METHOD 2: Welch FFT (lower variance than single FFT) ──────────────────
-function welchBPM(sig: number[], fs: number): { bpm: number; snr: number } {
-  const s2 = std(sig);
-  if (s2 < 1e-10) return { bpm: 0, snr: 0 };
-  const norm = sig.map(v => v / s2);
-
-  const segLen = Math.min(norm.length, 128);
-  const overlap = Math.floor(segLen / 2);
-  const step = segLen - overlap;
-  const nSegs = Math.floor((norm.length - segLen) / step) + 1;
-
-  if (nSegs < 1) {
-    // Fall back to single FFT
-    const w = norm.map((v, i) => v * (0.5 - 0.5 * Math.cos(2 * Math.PI * i / (norm.length - 1))));
-    const padded = [...w, ...new Array(norm.length * 3).fill(0)];
-    const m = fftMag(padded);
-    const fr = fs / (m.length * 2);
-    const lo = Math.max(1, Math.floor(BPM_LO / 60 / fr));
-    const hi = Math.min(m.length - 2, Math.ceil(BPM_HI / 60 / fr));
-    let peak = 0, pb = lo, bsum = 0;
-    for (let k = lo; k <= hi; k++) { bsum += m[k]; if (m[k] > peak) { peak = m[k]; pb = k; } }
-    const bmean = bsum / Math.max(1, hi - lo + 1);
-    const snr = bmean > 0 ? peak / bmean : 0;
-    let freq = pb * fr;
-    if (pb > 0 && pb < m.length - 1) {
-      const al = m[pb-1], bm2 = m[pb], ar = m[pb+1], d = al - 2*bm2 + ar;
-      if (Math.abs(d) > 1e-12) freq = (pb + 0.5 * (al - ar) / d) * fr;
-    }
-    return { bpm: Math.round(clamp(freq * 60, BPM_LO, BPM_HI)), snr };
-  }
-
-  // Average multiple FFT segments
-  let sz = 1; while (sz < segLen * 4) sz <<= 1;
-  const avgMag = new Float64Array(sz >> 1);
-
-  for (let s = 0; s < nSegs; s++) {
-    const start = s * step;
-    const seg = norm.slice(start, start + segLen);
-    const w = seg.map((v, i) => v * (0.5 - 0.5 * Math.cos(2 * Math.PI * i / (segLen - 1))));
-    const padded = [...w, ...new Array(sz - segLen).fill(0)];
-    const m = fftMag(padded);
-    for (let k = 0; k < avgMag.length; k++) avgMag[k] += m[k];
-  }
-  for (let k = 0; k < avgMag.length; k++) avgMag[k] /= nSegs;
-
-  const fr = fs / (avgMag.length * 2);
-  const lo = Math.max(1, Math.floor(BPM_LO / 60 / fr));
-  const hi = Math.min(avgMag.length - 2, Math.ceil(BPM_HI / 60 / fr));
-  let peak = 0, pb = lo, bsum = 0;
-  for (let k = lo; k <= hi; k++) { bsum += avgMag[k]; if (avgMag[k] > peak) { peak = avgMag[k]; pb = k; } }
-  const bmean = bsum / Math.max(1, hi - lo + 1);
-  const snr = bmean > 0 ? peak / bmean : 0;
-
-  // Parabolic interpolation
-  let freq = pb * fr;
-  if (pb > lo && pb < hi) {
-    const al = avgMag[pb-1], bm2 = avgMag[pb], ar = avgMag[pb+1];
-    const d = al - 2*bm2 + ar;
-    if (Math.abs(d) > 1e-12) freq = (pb + 0.5 * (al - ar) / d) * fr;
-  }
-
-  return { bpm: Math.round(clamp(freq * 60, BPM_LO, BPM_HI)), snr };
-}
-
-// ─── METHOD 3: Autocorrelation ──────────────────────────────────────────────
+// ─── METHOD 3: Autocorrelation with harmonic rejection ──────────────────
 function acfBPM(sig: number[], fs: number): { bpm: number; conf: number } {
   const n = sig.length;
   const minLag = Math.max(2, Math.floor(fs * 60 / BPM_HI));
@@ -364,33 +364,51 @@ function acfBPM(sig: number[], fs: number): { bpm: number; conf: number } {
   if (s2 < 1e-10) return { bpm: 0, conf: 0 };
   const norm = sig.map(v => (v - m2) / s2);
 
-  let best = -Infinity, bestLag = minLag;
   const acf: number[] = [];
   for (let lag = minLag; lag <= maxLag; lag++) {
     let c = 0;
     for (let i = 0; i < n - lag; i++) c += norm[i] * norm[i + lag];
     c /= (n - lag);
     acf.push(c);
-    if (c > best) { best = c; bestLag = lag; }
   }
-  if (best < 0.08) return { bpm: 0, conf: 0 };
 
-  // Parabolic interpolation around ACF peak
-  const peakIdx = bestLag - minLag;
-  let refinedLag = bestLag;
+  // Find all local maxima in ACF
+  const acfPeaks: { lag: number; val: number }[] = [];
+  for (let i = 1; i < acf.length - 1; i++) {
+    if (acf[i] > acf[i-1] && acf[i] > acf[i+1] && acf[i] > 0.08) {
+      acfPeaks.push({ lag: minLag + i, val: acf[i] });
+    }
+  }
+  if (acfPeaks.length === 0) return { bpm: 0, conf: 0 };
+
+  // The fundamental period produces the FIRST significant ACF peak
+  // (harmonics produce peaks at 2x, 3x the fundamental lag)
+  // So prefer the first peak if it's reasonably strong
+  acfPeaks.sort((a, b) => a.lag - b.lag);
+  let bestPeak = acfPeaks[0];
+
+  // But if a later peak is much stronger (>2x), it might be the real one
+  for (let i = 1; i < acfPeaks.length; i++) {
+    if (acfPeaks[i].val > bestPeak.val * 2.0) {
+      bestPeak = acfPeaks[i];
+    }
+  }
+
+  const peakIdx = bestPeak.lag - minLag;
+  let refinedLag = bestPeak.lag;
   if (peakIdx > 0 && peakIdx < acf.length - 1) {
     const a = acf[peakIdx - 1], b = acf[peakIdx], c2 = acf[peakIdx + 1];
     const denom = a - 2 * b + c2;
     if (Math.abs(denom) > 1e-12) {
-      refinedLag = bestLag + 0.5 * (a - c2) / denom;
+      refinedLag = bestPeak.lag + 0.5 * (a - c2) / denom;
     }
   }
 
-  const conf = Math.round(Math.min(100, best * 100));
+  const conf = Math.round(Math.min(100, bestPeak.val * 100));
   return { bpm: Math.round(fs * 60 / refinedLag), conf };
 }
 
-// ─── SNR-weighted consensus ─────────────────────────────────────────────────
+// ─── SNR-weighted consensus ─────────────────────────────────────────────
 function consensus(
   peak: { bpm: number; conf: number },
   fft: { bpm: number; snr: number },
@@ -398,17 +416,16 @@ function consensus(
 ): { bpm: number; conf: number; method: string } {
   const candidates: { bpm: number; weight: number; label: string }[] = [];
 
-  if (peak.bpm >= BPM_LO && peak.bpm <= BPM_HI && peak.conf > 15)
+  if (peak.bpm >= BPM_LO && peak.bpm <= BPM_HI && peak.conf > 20)
     candidates.push({ bpm: peak.bpm, weight: peak.conf, label: "P" });
-  if (fft.bpm >= BPM_LO && fft.bpm <= BPM_HI && fft.snr > 1.5)
-    candidates.push({ bpm: fft.bpm, weight: Math.min(100, fft.snr * 20), label: "F" });
-  if (acf.bpm >= BPM_LO && acf.bpm <= BPM_HI && acf.conf > 10)
+  if (fft.bpm >= BPM_LO && fft.bpm <= BPM_HI && fft.snr > 2.0)
+    candidates.push({ bpm: fft.bpm, weight: Math.min(100, fft.snr * 15), label: "F" });
+  if (acf.bpm >= BPM_LO && acf.bpm <= BPM_HI && acf.conf > 15)
     candidates.push({ bpm: acf.bpm, weight: acf.conf, label: "A" });
 
   if (candidates.length === 0) return { bpm: 0, conf: 0, method: "NONE" };
-  if (candidates.length === 1) return { bpm: candidates[0].bpm, conf: Math.min(50, candidates[0].weight), method: candidates[0].label };
+  if (candidates.length === 1) return { bpm: candidates[0].bpm, conf: Math.min(45, candidates[0].weight), method: candidates[0].label };
 
-  // Find agreeing pairs
   const agreements: { bpm: number; totalWeight: number; labels: string[] }[] = [];
   for (let i = 0; i < candidates.length; i++) {
     for (let j = i + 1; j < candidates.length; j++) {
@@ -423,16 +440,15 @@ function consensus(
   if (agreements.length > 0) {
     agreements.sort((a, b) => b.totalWeight - a.totalWeight);
     const best = agreements[0];
-    const conf = Math.min(95, Math.round(best.totalWeight * 0.6));
+    const conf = Math.min(95, Math.round(best.totalWeight * 0.55));
     return { bpm: best.bpm, conf, method: best.labels.join("+") };
   }
 
-  // No agreement — use highest-weight candidate
   candidates.sort((a, b) => b.weight - a.weight);
-  return { bpm: candidates[0].bpm, conf: Math.min(40, candidates[0].weight), method: candidates[0].label + "?" };
+  return { bpm: candidates[0].bpm, conf: Math.min(35, candidates[0].weight), method: candidates[0].label + "?" };
 }
 
-// ─── ROI sampling ───────────────────────────────────────────────────────────
+// ─── ROI sampling ───────────────────────────────────────────────────────
 function sampleROI(
   ctx: CanvasRenderingContext2D,
   foreheadBox: FaceBox | null,
@@ -478,7 +494,7 @@ function sampleROI(
   return { r, g, b, ok: r > 15 && g > 10 && r < 250, label };
 }
 
-// ─── Hook ───────────────────────────────────────────────────────────────────
+// ─── Hook ───────────────────────────────────────────────────────────────
 export function useHeartbeat(
   videoRef: React.RefObject<HTMLVideoElement | null>,
   faceBoxRef?:     React.MutableRefObject<FaceBox | null>,
@@ -501,6 +517,7 @@ export function useHeartbeat(
   const noFaceFrames = useRef<number>(0);
   const FACE_LOST_THRESHOLD = 15;
   const rawBpmHist = useRef<number[]>([]);
+  const outputHist = useRef<number[]>([]);
 
   const [data, setData] = useState<HeartbeatData>({
     bpm: null, confidence: 0, signal: [], isActive: false,
@@ -540,7 +557,7 @@ export function useHeartbeat(
     if (roi.ok) {
       noFaceFrames.current = 0;
       rawBuf.current.push([now, roi.r, roi.g, roi.b]);
-      while (rawBuf.current.length > 2 && rawBuf.current[0][0] < now - 25000)
+      while (rawBuf.current.length > 2 && rawBuf.current[0][0] < now - 30000)
         rawBuf.current.shift();
 
       const interval = 1000 / FS;
@@ -561,7 +578,7 @@ export function useHeartbeat(
         resB.current.push(s0[3]*(1-a) + s1[3]*a);
         lastResMs.current = t;
 
-        const maxN = WIN + FS * 8;
+        const maxN = WIN + FS * 10;
         if (resR.current.length > maxN) {
           resR.current.shift(); resG.current.shift(); resB.current.shift();
         }
@@ -577,6 +594,7 @@ export function useHeartbeat(
         lastResMs.current = 0;
         histBpm.current = [];
         rawBpmHist.current = [];
+        outputHist.current = [];
         calRef.current = 0;
         setData({
           bpm: null, confidence: 0, signal: [], isActive: true,
@@ -593,14 +611,12 @@ export function useHeartbeat(
       return;
     }
 
-    // Process every 3 frames (more responsive than every 5)
     if (frameRef.current % 3 === 0 && resR.current.length >= WIN) {
       const len = resR.current.length;
       const R = resR.current.slice(len - WIN);
       const G = resG.current.slice(len - WIN);
       const B = resB.current.slice(len - WIN);
 
-      // Standardize channels (zero-mean, unit-variance) — NO pre-smoothing
       const mR = mean(R), sR = std(R);
       const mG = mean(G), sG = std(G);
       const mB = mean(B), sB = std(B);
@@ -608,55 +624,54 @@ export function useHeartbeat(
       const Gs = G.map(v => (v - mG) / sG);
       const Bs = B.map(v => (v - mB) / sB);
 
-      // POS pulse extraction (directly on standardized channels)
       const posPulse = windowedPOS(Rs, Gs, Bs);
 
-      // Detrend + bandpass
       const posDetrended = detrendSP(posPulse, DETREND_LAM);
-      const posFiltered = bandpass(posDetrended, BP_LO, BP_HI, FS);
+      const posFiltered = bandpass4(posDetrended, BP_LO, BP_HI, FS);
 
-      // Green channel (classic approach)
       const greenDetrended = detrendSP(Gs, DETREND_LAM);
-      const greenFiltered = bandpass(greenDetrended, BP_LO, BP_HI, FS);
+      const greenFiltered = bandpass4(greenDetrended, BP_LO, BP_HI, FS);
 
-      // Select signal by SNR (not just std)
       const posFft = welchBPM(posFiltered, FS);
       const greenFft = welchBPM(greenFiltered, FS);
       const bestSig = posFft.snr >= greenFft.snr ? posFiltered : greenFiltered;
       const sigLabel = posFft.snr >= greenFft.snr ? "POS" : "GRN";
 
-      // Triple estimation on best signal
       const peakResult = peakCountBPM(bestSig, FS);
       const fftResult  = posFft.snr >= greenFft.snr ? posFft : greenFft;
       const acfResult  = acfBPM(bestSig, FS);
 
       const { bpm: consBpm, conf, method } = consensus(peakResult, fftResult, acfResult);
 
-      if (consBpm >= BPM_LO && consBpm <= BPM_HI && conf >= 20) {
+      if (consBpm >= BPM_LO && consBpm <= BPM_HI && conf >= 15) {
         rawBpmHist.current.push(consBpm);
         if (rawBpmHist.current.length > 30) rawBpmHist.current.shift();
 
         if (bpmRef.current === null) {
-          // First reading — use median of last few raw readings for stability
-          if (rawBpmHist.current.length >= 3) {
-            bpmRef.current = Math.round(median(rawBpmHist.current.slice(-5)));
+          if (rawBpmHist.current.length >= 5) {
+            bpmRef.current = Math.round(median(rawBpmHist.current.slice(-7)));
             histBpm.current = [bpmRef.current];
+            outputHist.current = [bpmRef.current];
           }
         } else {
           const jump = Math.abs(consBpm - bpmRef.current);
 
-          // Adaptive EMA — faster response for small changes, slower for jumps
-          if (jump <= 20 || conf >= 60) {
-            const alpha = jump <= 5 ? EMA_ALPHA : jump <= 12 ? EMA_ALPHA * 0.6 : EMA_ALPHA * 0.3;
+          if (jump <= 25 || conf >= 55) {
+            const alpha = jump <= 5 ? EMA_ALPHA : jump <= 15 ? EMA_ALPHA * 0.5 : EMA_ALPHA * 0.25;
             bpmRef.current = Math.round(bpmRef.current * (1 - alpha) + consBpm * alpha);
-            histBpm.current.push(bpmRef.current);
-            if (histBpm.current.length > 20) histBpm.current.shift();
           }
-          // Large jumps with low confidence are ignored (motion artifact)
+
+          outputHist.current.push(bpmRef.current);
+          if (outputHist.current.length > 5) outputHist.current.shift();
+
+          histBpm.current.push(bpmRef.current);
+          if (histBpm.current.length > 20) histBpm.current.shift();
         }
       }
 
-      const finalBpm = bpmRef.current;
+      const finalBpm = outputHist.current.length >= 3
+        ? Math.round(median(outputHist.current))
+        : bpmRef.current;
       const stress: "low" | "medium" | "high" =
         finalBpm != null ? (finalBpm > 100 ? "high" : finalBpm > 83 ? "medium" : "low") : "low";
 
@@ -698,7 +713,7 @@ export function useHeartbeat(
     rawBuf.current = []; resR.current = []; resG.current = []; resB.current = [];
     lastResMs.current = 0; bpmRef.current = null; frameRef.current = 0;
     calRef.current = 0; fpsRef.current = 30; prevMsRef.current = 0;
-    histBpm.current = []; rawBpmHist.current = [];
+    histBpm.current = []; rawBpmHist.current = []; outputHist.current = [];
     noFaceFrames.current = 0;
     rafRef.current = requestAnimationFrame(processFrame);
   }, [processFrame]);
@@ -712,12 +727,12 @@ export function useHeartbeat(
 
   const panic = useCallback(() => {
     bpmRef.current = 116 + Math.floor(Math.random() * 18); calRef.current = 999;
-    histBpm.current = [bpmRef.current!];
+    histBpm.current = [bpmRef.current!]; outputHist.current = [bpmRef.current!];
     setData(prev => ({ ...prev, bpm: bpmRef.current, stress: "high", trend: "rising", confidence: 87, calibrating: false }));
   }, []);
   const calm = useCallback(() => {
     bpmRef.current = 60 + Math.floor(Math.random() * 9); calRef.current = 999;
-    histBpm.current = [bpmRef.current!];
+    histBpm.current = [bpmRef.current!]; outputHist.current = [bpmRef.current!];
     setData(prev => ({ ...prev, bpm: bpmRef.current, stress: "low", trend: "falling", confidence: 84, calibrating: false }));
   }, []);
 
