@@ -58,14 +58,7 @@ function analyzeText(text: string): Pick<SpeechAnalytics, "wpm" | "fillerCount" 
     )
   ));
 
-  return {
-    wpm: avgWPM,
-    fillerCount,
-    fillerWords: foundFillers,
-    wordCount,
-    vocabularyScore,
-    confidenceScore,
-  };
+  return { wpm: avgWPM, fillerCount, fillerWords: foundFillers, wordCount, vocabularyScore, confidenceScore };
 }
 
 declare global {
@@ -75,20 +68,39 @@ declare global {
   }
 }
 
-async function requestMicPermission(): Promise<boolean> {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    stream.getTracks().forEach(track => track.stop());
-    return true;
-  } catch {
-    return false;
+const BASE = import.meta.env.BASE_URL || "/";
+
+async function transcribeAudio(audioBlob: Blob): Promise<string> {
+  const arrayBuf = await audioBlob.arrayBuffer();
+  const base64 = btoa(
+    new Uint8Array(arrayBuf).reduce((data, byte) => data + String.fromCharCode(byte), "")
+  );
+
+  const resp = await fetch(`${BASE}api/transcribe`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ audio: base64 }),
+  });
+
+  if (!resp.ok) {
+    const errBody = await resp.json().catch(() => ({}));
+    throw new Error(errBody.error || `Transcription failed: ${resp.status}`);
   }
+
+  const result = await resp.json();
+  return result.text || "";
 }
 
 export function useSpeechRecognition() {
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fullTranscriptRef = useRef<string>("");
   const sessionTranscriptRef = useRef<string>("");
+  const isActiveRef = useRef(false);
+  const processingRef = useRef(false);
+
   const [data, setData] = useState<SpeechRecognitionData>({
     isListening: false,
     interimText: "",
@@ -98,149 +110,156 @@ export function useSpeechRecognition() {
       wordCount: 0, vocabularyScore: 0, confidenceScore: 0, transcript: "",
     },
     error: null,
-    supported: typeof window !== "undefined" &&
-      !!(window.SpeechRecognition || window.webkitSpeechRecognition),
+    supported: true,
   });
 
   const onResultRef = useRef<((text: string) => void) | null>(null);
-  const micPermissionGrantedRef = useRef(false);
-  const restartingRef = useRef(false);
 
-  const supported = !!(
-    typeof window !== "undefined" &&
-    (window.SpeechRecognition || window.webkitSpeechRecognition)
-  );
+  const processChunks = useCallback(async () => {
+    if (processingRef.current || chunksRef.current.length === 0) return;
+    processingRef.current = true;
 
-  const startListening = useCallback(async (onResult?: (finalText: string) => void) => {
-    if (!supported) {
-      setData(prev => ({
-        ...prev,
-        error: "Speech recognition not supported — use Chrome or Edge",
-        supported: false,
-      }));
+    const blob = new Blob(chunksRef.current, { type: chunksRef.current[0]?.type || "audio/webm" });
+    chunksRef.current = [];
+
+    if (blob.size < 1000) {
+      processingRef.current = false;
       return;
     }
 
-    if (!micPermissionGrantedRef.current) {
-      const granted = await requestMicPermission();
-      if (!granted) {
+    try {
+      setData(prev => ({ ...prev, interimText: "Transcribing..." }));
+      const text = await transcribeAudio(blob);
+
+      if (text && text.trim()) {
+        fullTranscriptRef.current += (fullTranscriptRef.current ? " " : "") + text.trim();
+        sessionTranscriptRef.current += (sessionTranscriptRef.current ? " " : "") + text.trim();
+
+        if (onResultRef.current) {
+          onResultRef.current(fullTranscriptRef.current.trim());
+        }
+
+        const combined = sessionTranscriptRef.current;
+        const stats = analyzeText(combined);
         setData(prev => ({
           ...prev,
-          error: "Microphone access denied — please allow mic permission and try again",
-          isListening: false,
+          interimText: "",
+          finalText: fullTranscriptRef.current.trim(),
+          analytics: { ...stats, transcript: sessionTranscriptRef.current },
+          error: null,
         }));
-        return;
+      } else {
+        setData(prev => ({ ...prev, interimText: "" }));
       }
-      micPermissionGrantedRef.current = true;
-    }
-
-    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch {}
-    }
-
-    onResultRef.current = onResult || null;
-    const rec = new SpeechRec();
-    recognitionRef.current = rec;
-    rec.continuous = true;
-    rec.interimResults = true;
-    rec.lang = "en-US";
-    rec.maxAlternatives = 1;
-
-    rec.onresult = (event: SpeechRecognitionEvent) => {
-      let interim = "";
-      let newFinal = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          newFinal += transcript + " ";
-        } else {
-          interim += transcript;
-        }
-      }
-
-      if (newFinal) {
-        fullTranscriptRef.current += newFinal;
-        sessionTranscriptRef.current += newFinal;
-        if (onResultRef.current) onResultRef.current(fullTranscriptRef.current.trim());
-      }
-
-      const combined = sessionTranscriptRef.current + interim;
-      const stats = analyzeText(combined);
+    } catch (err: unknown) {
+      console.error("Transcription error:", err);
       setData(prev => ({
         ...prev,
-        interimText: interim,
-        finalText: fullTranscriptRef.current.trim(),
-        analytics: { ...stats, transcript: sessionTranscriptRef.current },
-        error: null,
+        interimText: "",
+        error: err instanceof Error ? err.message : "Transcription failed",
       }));
-    };
+    }
 
-    rec.onerror = (event: SpeechRecognitionErrorEvent) => {
-      const err = event.error;
-      if (err === "not-allowed") {
-        setData(prev => ({
-          ...prev,
-          error: "Microphone blocked — check browser permissions",
-          isListening: false,
-        }));
-        recognitionRef.current = null;
-        return;
-      }
-      if (err === "network") {
-        setData(prev => ({
-          ...prev,
-          error: "Speech recognition needs internet connection",
-          isListening: false,
-        }));
-        return;
-      }
-      if (err !== "aborted" && err !== "no-speech") {
-        setData(prev => ({ ...prev, error: `Mic error: ${err}` }));
-      }
-    };
+    processingRef.current = false;
+  }, []);
 
-    rec.onend = () => {
-      if (recognitionRef.current === rec && !restartingRef.current) {
-        restartingRef.current = true;
-        try {
-          setTimeout(() => {
-            if (recognitionRef.current === rec) {
-              try { rec.start(); } catch {}
-            }
-            restartingRef.current = false;
-          }, 100);
-        } catch {
-          restartingRef.current = false;
-        }
-      }
-    };
-
-    rec.onstart = () => {
-      setData(prev => ({ ...prev, isListening: true, error: null }));
-    };
-
-    rec.onaudiostart = () => {
-      setData(prev => ({ ...prev, isListening: true, error: null }));
-    };
+  const startListening = useCallback(async (onResult?: (finalText: string) => void) => {
+    onResultRef.current = onResult || null;
 
     try {
-      rec.start();
-    } catch (e: unknown) {
-      const errMsg = e instanceof Error ? e.message : "Could not start microphone";
-      setData(prev => ({ ...prev, error: errMsg, isListening: false }));
-    }
-  }, [supported]);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 16000,
+        }
+      });
+      streamRef.current = stream;
 
-  const stopListening = useCallback(() => {
-    if (recognitionRef.current) {
-      const rec = recognitionRef.current;
-      recognitionRef.current = null;
-      restartingRef.current = false;
-      try { rec.stop(); } catch {}
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/webm")
+        ? "audio/webm"
+        : "audio/mp4";
+
+      const recorder = new MediaRecorder(stream, { mimeType });
+      mediaRecorderRef.current = recorder;
+      chunksRef.current = [];
+      isActiveRef.current = true;
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          chunksRef.current.push(e.data);
+        }
+      };
+
+      recorder.start(100);
+
+      setData(prev => ({ ...prev, isListening: true, error: null }));
+
+      intervalRef.current = setInterval(() => {
+        if (!isActiveRef.current) return;
+        if (mediaRecorderRef.current?.state === "recording") {
+          mediaRecorderRef.current.stop();
+          setTimeout(() => {
+            if (isActiveRef.current && streamRef.current) {
+              try {
+                const newRecorder = new MediaRecorder(streamRef.current, { mimeType });
+                mediaRecorderRef.current = newRecorder;
+                newRecorder.ondataavailable = (e) => {
+                  if (e.data && e.data.size > 0) {
+                    chunksRef.current.push(e.data);
+                  }
+                };
+                newRecorder.start(100);
+              } catch {}
+            }
+          }, 50);
+        }
+        processChunks();
+      }, 4000);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Microphone access denied";
+      if (msg.includes("Permission") || msg.includes("NotAllowed") || msg.includes("denied")) {
+        setData(prev => ({
+          ...prev,
+          error: "Microphone access denied — please allow mic permission in your browser settings",
+          isListening: false,
+        }));
+      } else {
+        setData(prev => ({
+          ...prev,
+          error: `Mic error: ${msg}`,
+          isListening: false,
+        }));
+      }
     }
+  }, [processChunks]);
+
+  const stopListening = useCallback(async () => {
+    isActiveRef.current = false;
+
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+
+    if (mediaRecorderRef.current?.state === "recording") {
+      mediaRecorderRef.current.stop();
+    }
+    mediaRecorderRef.current = null;
+
+    if (chunksRef.current.length > 0) {
+      await processChunks();
+    }
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+
     setData(prev => ({ ...prev, isListening: false, interimText: "" }));
-  }, []);
+  }, [processChunks]);
 
   const clearTranscript = useCallback(() => {
     fullTranscriptRef.current = "";
@@ -259,11 +278,13 @@ export function useSpeechRecognition() {
   }, []);
 
   useEffect(() => () => {
-    if (recognitionRef.current) {
-      const rec = recognitionRef.current;
-      recognitionRef.current = null;
-      restartingRef.current = false;
-      try { rec.stop(); } catch {}
+    isActiveRef.current = false;
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    if (mediaRecorderRef.current?.state === "recording") {
+      try { mediaRecorderRef.current.stop(); } catch {}
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
     }
   }, []);
 
@@ -273,6 +294,6 @@ export function useSpeechRecognition() {
     stopListening,
     clearTranscript,
     clearCurrentAnswer,
-    supported,
+    supported: true,
   };
 }
