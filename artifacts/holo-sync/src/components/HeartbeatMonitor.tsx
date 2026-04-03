@@ -4,88 +4,133 @@ import type { HeartbeatData } from "../hooks/useHeartbeat";
 interface HeartbeatMonitorProps {
   data: HeartbeatData;
   onPanic?: () => void;
+  onCalm?: () => void;
 }
 
-export default function HeartbeatMonitor({ data, onPanic }: HeartbeatMonitorProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+export default function HeartbeatMonitor({ data, onPanic, onCalm }: HeartbeatMonitorProps) {
+  const ecgCanvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
-  const offsetRef = useRef(0);
+  const trailRef = useRef<number[]>([]);
   const [displayBpm, setDisplayBpm] = useState(data.bpm);
 
+  // Smooth BPM display counter
   useEffect(() => {
-    let target = data.bpm;
+    let targetBpm = data.bpm;
     let current = displayBpm;
-    const step = () => {
-      current += (target - current) * 0.1;
+    const interval = setInterval(() => {
+      const diff = targetBpm - current;
+      if (Math.abs(diff) < 1) { current = targetBpm; }
+      else { current += diff * 0.15; }
       setDisplayBpm(Math.round(current));
-    };
-    const interval = setInterval(step, 50);
+    }, 50);
     return () => clearInterval(interval);
   }, [data.bpm]);
 
+  // ECG waveform drawing
   useEffect(() => {
-    const canvas = canvasRef.current;
+    const canvas = ecgCanvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    const stressColor =
+      data.stress === "high" ? "#ff4444" :
+      data.stress === "medium" ? "#ffaa00" :
+      "#00d4ff";
+
+    const stressGlow =
+      data.stress === "high" ? "rgba(255,68,68,0.4)" :
+      data.stress === "medium" ? "rgba(255,170,0,0.4)" :
+      "rgba(0,212,255,0.4)";
+
+    // Merge incoming signal into trail
+    if (data.signal.length > 0) {
+      trailRef.current = [...trailRef.current, ...data.signal.slice(-3)].slice(-120);
+    }
+
+    let phase = 0;
+
     const draw = () => {
       const w = canvas.width;
       const h = canvas.height;
+
       ctx.clearRect(0, 0, w, h);
 
-      const stressColor =
-        data.stress === "high" ? "#ff4444" :
-        data.stress === "medium" ? "#ffaa00" :
-        "#00d4ff";
-
-      ctx.fillStyle = "rgba(0,0,0,0.1)";
-      ctx.fillRect(0, 0, w, h);
-
-      if (data.signal.length > 1) {
-        ctx.beginPath();
-        ctx.strokeStyle = stressColor;
-        ctx.lineWidth = 2;
-        ctx.shadowColor = stressColor;
-        ctx.shadowBlur = 8;
-
-        const step = w / (data.signal.length - 1);
-        const mid = h / 2;
-        const amplitude = h * 0.4;
-
-        data.signal.forEach((val, i) => {
-          const x = i * step;
-          const y = mid - val * amplitude;
-          if (i === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-        });
-        ctx.stroke();
-
-        const gradStroke = ctx.createLinearGradient(0, 0, w, 0);
-        gradStroke.addColorStop(0, stressColor + "00");
-        gradStroke.addColorStop(0.5, stressColor + "88");
-        gradStroke.addColorStop(1, stressColor + "00");
-
-        ctx.beginPath();
-        ctx.strokeStyle = gradStroke;
-        ctx.lineWidth = 1;
-        data.signal.forEach((val, i) => {
-          const x = i * step;
-          const y = mid - val * amplitude;
-          if (i === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-        });
-        ctx.stroke();
-      } else {
-        ctx.beginPath();
-        ctx.strokeStyle = "#00d4ff33";
-        ctx.lineWidth = 1;
-        ctx.moveTo(0, h / 2);
-        ctx.lineTo(w, h / 2);
-        ctx.stroke();
+      // Grid lines
+      ctx.strokeStyle = "rgba(0,212,255,0.06)";
+      ctx.lineWidth = 0.5;
+      for (let x = 0; x < w; x += 20) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+      }
+      for (let y = 0; y < h; y += 15) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
       }
 
+      const trail = trailRef.current;
+      if (trail.length < 2) {
+        animRef.current = requestAnimationFrame(draw);
+        return;
+      }
+
+      const mid = h * 0.5;
+      const amp = h * 0.38;
+      const step = w / (trail.length - 1);
+
+      // Glow fill
+      ctx.beginPath();
+      trail.forEach((v, i) => {
+        const x = i * step;
+        const y = mid - v * amp;
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      });
+      ctx.lineTo((trail.length - 1) * step, h);
+      ctx.lineTo(0, h);
+      ctx.closePath();
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, stressGlow);
+      grad.addColorStop(1, "transparent");
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // Main ECG line — draw in segments for glow effect
+      for (let pass = 0; pass < 2; pass++) {
+        ctx.beginPath();
+        ctx.strokeStyle = stressColor;
+        ctx.lineWidth = pass === 0 ? 3 : 1.5;
+        ctx.shadowColor = stressColor;
+        ctx.shadowBlur = pass === 0 ? 12 : 0;
+
+        trail.forEach((v, i) => {
+          const x = i * step;
+          const y = mid - v * amp;
+          i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+      }
       ctx.shadowBlur = 0;
+
+      // Moving scan head (leading edge indicator)
+      const headX = (trail.length - 1) * step;
+      const headY = mid - (trail[trail.length - 1] ?? 0) * amp;
+      ctx.beginPath();
+      ctx.arc(headX, headY, 3, 0, Math.PI * 2);
+      ctx.fillStyle = stressColor;
+      ctx.shadowColor = stressColor;
+      ctx.shadowBlur = 15;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // Baseline
+      ctx.beginPath();
+      ctx.strokeStyle = "rgba(0,212,255,0.15)";
+      ctx.lineWidth = 0.5;
+      ctx.setLineDash([4, 4]);
+      ctx.moveTo(0, mid);
+      ctx.lineTo(w, mid);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      phase = (phase + 1) % 360;
       animRef.current = requestAnimationFrame(draw);
     };
 
@@ -93,87 +138,169 @@ export default function HeartbeatMonitor({ data, onPanic }: HeartbeatMonitorProp
     return () => cancelAnimationFrame(animRef.current);
   }, [data.signal, data.stress]);
 
+  const stressColor =
+    data.stress === "high" ? "#ff4444" :
+    data.stress === "medium" ? "#ffaa00" :
+    "#00d4ff";
+
   const stressLabel =
     data.stress === "high" ? "CRITICAL" :
     data.stress === "medium" ? "ELEVATED" :
     "NORMAL";
 
-  const stressColor =
-    data.stress === "high" ? "text-red-400 text-glow-red" :
+  const stressTextClass =
+    data.stress === "high" ? "text-red-400" :
     data.stress === "medium" ? "text-yellow-400" :
-    "text-cyan-400 text-glow-cyan";
+    "text-cyan-400";
 
-  const bpmColor =
-    data.bpm > 100 ? "#ff4444" :
-    data.bpm > 80 ? "#ffaa00" :
-    "#00d4ff";
+  const trendIcon =
+    data.trend === "rising" ? "↑" :
+    data.trend === "falling" ? "↓" :
+    "→";
 
   return (
-    <div className="relative flex flex-col gap-2 p-3 rounded-lg border border-cyan-500/30 bg-black/50 backdrop-blur-sm">
-      <div className="flex items-center justify-between">
+    <div className="flex flex-col gap-2 rounded-xl border border-cyan-500/25 bg-black/60 backdrop-blur-md overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-3 pt-2.5">
         <div className="flex items-center gap-2">
           <div
-            className="animate-heartbeat"
-            style={{ color: bpmColor, fontSize: "16px" }}
+            className="text-base animate-heartbeat leading-none"
+            style={{ color: stressColor, filter: `drop-shadow(0 0 6px ${stressColor})` }}
           >
             ♥
           </div>
-          <span className="text-xs font-mono text-cyan-300 uppercase tracking-widest">Biometric Feed</span>
+          <span className="text-xs font-mono text-cyan-400/70 uppercase tracking-widest">
+            Biometric Monitor
+          </span>
         </div>
-        <div className={`text-xs font-bold uppercase tracking-widest ${stressColor}`}>
-          {data.isActive ? stressLabel : "OFFLINE"}
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-mono uppercase tracking-widest" style={{ color: stressColor }}>
+            {data.isActive ? stressLabel : "OFFLINE"}
+          </span>
         </div>
       </div>
 
-      <div className="flex items-end gap-3">
-        <div className="flex flex-col">
+      {/* BPM + ECG */}
+      <div className="flex items-stretch gap-2 px-3">
+        {/* BPM Display */}
+        <div className="flex flex-col justify-center items-start w-20 shrink-0">
           <div
-            className="text-5xl font-black font-mono leading-none"
-            style={{ color: bpmColor, textShadow: `0 0 20px ${bpmColor}88` }}
+            className="text-5xl font-black font-mono leading-none tabular-nums"
+            style={{
+              color: stressColor,
+              textShadow: `0 0 20px ${stressColor}88, 0 0 40px ${stressColor}44`,
+            }}
           >
             {displayBpm}
           </div>
-          <div className="text-xs text-cyan-500 font-mono mt-1 uppercase tracking-widest">BPM</div>
+          <div className="text-xs text-cyan-500/60 font-mono uppercase tracking-widest mt-1">BPM</div>
+          <div className="flex items-center gap-1 mt-1">
+            <span className="text-xs font-mono" style={{ color: stressColor }}>{trendIcon}</span>
+            <span className="text-xs font-mono text-cyan-600">
+              {data.trend.toUpperCase()}
+            </span>
+          </div>
         </div>
 
-        <div className="flex-1 flex flex-col gap-1">
+        {/* ECG Canvas */}
+        <div className="flex-1 relative">
           <canvas
-            ref={canvasRef}
-            width={200}
-            height={60}
-            className="w-full h-16 rounded"
-            style={{ background: "rgba(0,212,255,0.03)" }}
+            ref={ecgCanvasRef}
+            width={220}
+            height={72}
+            className="w-full h-full rounded-lg"
+            style={{ background: "rgba(0,8,16,0.6)" }}
           />
-          <div className="flex justify-between text-xs font-mono text-cyan-600">
-            <span>{data.trend === "rising" ? "↑ RISING" : data.trend === "falling" ? "↓ FALLING" : "→ STABLE"}</span>
-            <span>{data.isActive ? "● LIVE" : "○ INACTIVE"}</span>
-          </div>
         </div>
       </div>
 
-      <div className="flex gap-2 items-center">
-        <div className="flex-1 h-1.5 rounded-full bg-gray-800 overflow-hidden">
+      {/* Signal Quality Bar */}
+      <div className="px-3">
+        <div className="flex justify-between text-xs font-mono mb-1">
+          <span className="text-cyan-600/70 uppercase tracking-widest">Signal Quality</span>
+          <span style={{ color: data.confidence > 60 ? "#00d4ff" : data.confidence > 30 ? "#ffaa00" : "#ff4444" }}>
+            {data.isActive ? `${data.confidence}%` : "---"}
+          </span>
+        </div>
+        <div className="h-1 rounded-full bg-gray-900 overflow-hidden">
           <div
-            className="h-full rounded-full transition-all duration-500"
+            className="h-full rounded-full transition-all duration-700"
             style={{
-              width: `${Math.min(100, ((data.bpm - 50) / 100) * 100)}%`,
-              background: `linear-gradient(90deg, #00d4ff, ${bpmColor})`,
-              boxShadow: `0 0 8px ${bpmColor}66`,
+              width: `${data.isActive ? data.confidence : 0}%`,
+              background: `linear-gradient(90deg, #004466, ${stressColor})`,
+              boxShadow: `0 0 8px ${stressColor}66`,
             }}
           />
         </div>
-        <span className="text-xs font-mono text-cyan-600">
-          {data.bpm < 60 ? "50" : data.bpm > 140 ? "150+" : data.bpm} bpm
+      </div>
+
+      {/* BPM Gauge */}
+      <div className="px-3">
+        <div className="flex justify-between text-xs font-mono mb-1">
+          <span className="text-cyan-600/50 font-mono">40</span>
+          <span className="text-cyan-600/70 uppercase tracking-widest text-center">Heart Rate Range</span>
+          <span className="text-cyan-600/50 font-mono">180</span>
+        </div>
+        <div className="h-2 rounded-full bg-gray-900 overflow-hidden relative">
+          {/* Zone markers */}
+          <div className="absolute inset-y-0 left-[15%] right-[33%] bg-green-500/10" />
+          <div className="absolute inset-y-0 left-[43%] right-[18%] bg-yellow-500/10" />
+          <div className="absolute inset-y-0 left-[58%] right-0 bg-red-500/10" />
+          <div
+            className="h-full rounded-full transition-all duration-500"
+            style={{
+              width: `${Math.min(100, Math.max(0, ((displayBpm - 40) / 140) * 100))}%`,
+              background: `linear-gradient(90deg, #00ff88, #ffaa00, ${stressColor})`,
+              boxShadow: `0 0 12px ${stressColor}88`,
+            }}
+          />
+        </div>
+        <div className="flex justify-between text-xs font-mono mt-0.5 text-cyan-700/50">
+          <span>REST</span>
+          <span>MODERATE</span>
+          <span>HIGH</span>
+        </div>
+      </div>
+
+      {/* Info Row */}
+      <div className="flex items-center justify-between px-3 pb-2.5 text-xs font-mono text-cyan-700/60">
+        <span className="flex items-center gap-1">
+          <span className="text-cyan-500/50">ALGO</span>
+          <span className="text-cyan-400/70 font-bold">{data.algorithm}</span>
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="text-cyan-500/50">FPS</span>
+          <span className="text-cyan-400/70">{data.frameRate}</span>
+        </span>
+        <span className={`flex items-center gap-1 ${data.faceDetected ? "text-green-500/70" : "text-red-500/60"}`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${data.faceDetected ? "bg-green-500 animate-pulse" : "bg-red-500"}`} />
+          {data.faceDetected ? "FACE OK" : "NO FACE"}
+        </span>
+        <span className={data.isActive ? "text-green-500/70" : "text-red-500/60"}>
+          {data.isActive ? "● LIVE" : "○ OFF"}
         </span>
       </div>
 
-      {onPanic && (
-        <button
-          onMouseDown={onPanic}
-          className="mt-1 text-xs font-bold font-mono uppercase tracking-widest text-red-400 border border-red-400/30 rounded px-2 py-1 hover:bg-red-400/10 transition-colors"
-        >
-          ⚠ Simulate Panic
-        </button>
+      {/* Demo controls */}
+      {(onPanic || onCalm) && (
+        <div className="flex gap-1 px-3 pb-2.5">
+          {onPanic && (
+            <button
+              onClick={onPanic}
+              className="flex-1 text-xs font-bold font-mono uppercase tracking-widest text-red-400 border border-red-400/30 rounded-lg px-2 py-1.5 hover:bg-red-400/10 active:bg-red-400/20 transition-colors"
+            >
+              ⚠ Stress Demo
+            </button>
+          )}
+          {onCalm && (
+            <button
+              onClick={onCalm}
+              className="flex-1 text-xs font-bold font-mono uppercase tracking-widest text-green-400 border border-green-400/30 rounded-lg px-2 py-1.5 hover:bg-green-400/10 active:bg-green-400/20 transition-colors"
+            >
+              ↓ Calm Demo
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

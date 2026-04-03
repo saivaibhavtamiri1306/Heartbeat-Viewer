@@ -23,7 +23,7 @@ type AvatarEmotion = "neutral" | "empathetic" | "stern" | "curious" | "stressed"
 
 export default function Interview({ domain, onEnd }: InterviewProps) {
   const { videoRef, isActive: camActive, error: camError, startWebcam, stopWebcam } = useWebcam();
-  const { data: heartData, start: startHeartbeat, stop: stopHeartbeat, panic } = useHeartbeat(videoRef);
+  const { data: heartData, start: startHeartbeat, stop: stopHeartbeat, panic, calm } = useHeartbeat(videoRef);
 
   const [phase, setPhase] = useState<Phase>("starting");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -269,6 +269,7 @@ export default function Interview({ domain, onEnd }: InterviewProps) {
           <HeartbeatMonitor
             data={heartData}
             onPanic={panic}
+            onCalm={calm}
           />
 
           <div className="flex flex-col gap-2 p-3 rounded-lg border border-cyan-500/20 bg-black/30">
