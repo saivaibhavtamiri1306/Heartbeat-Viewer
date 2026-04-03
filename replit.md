@@ -31,7 +31,7 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 **Artifact**: `artifacts/holo-sync` (React + Vite + Three.js)
 
 ### Features
-- **rPPG Heartbeat Detection**: Webcam-based heart rate via POS algorithm with triple-method consensus (peak counting + FFT + autocorrelation). Uses 1st-order Butterworth bandpass 0.75–3.0 Hz with filtfilt, smoothness-prior detrending, EMA smoothing.
+- **rPPG Heartbeat Detection (v2)**: Webcam-based heart rate via POS algorithm (Wang 2017) with NO pre-smoothing. True smoothness-prior detrending (pentadiagonal Gauss-Seidel, λ=300). 2nd-order Butterworth bandpass 0.7–4.0 Hz via biquad cascades + filtfilt. Welch FFT for lower variance. Triple estimation: adaptive peak counting + Welch FFT + ACF with parabolic interpolation. SNR-weighted consensus. Faster calibration (WIN=180 ~6s). Responsive EMA (α=0.35). Updates every 3 frames.
 - **3D Holographic Avatar**: React Three Fiber scene with realistic human-like faces (skin tone, lips, jaw, irises, eyebrows, ears). Emotion-adaptive (neutral, stern, empathetic, amused, thinking).
 - **5 Interview Domains**: UPSC, SWE, NDA, Medical, Investment Banking — each with domain-specific educational backgrounds, topic selection, and Easy/Medium/Hard difficulty levels.
 - **Interview Configuration**: After domain selection, users choose their educational background (B.Tech, BA, MBBS, etc.), difficulty level, and specific topics. Questions are filtered and weighted by difficulty.

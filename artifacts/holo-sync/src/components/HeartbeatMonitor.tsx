@@ -196,7 +196,9 @@ export default function HeartbeatMonitor({ data, onPanic, onCalm }: HeartbeatMon
                 ---
               </div>
               <div className="text-xs font-mono text-cyan-600/70 uppercase tracking-wider leading-tight">
-                {data.isActive && data.faceDetected ? "Calibrating" : data.isActive ? "Detecting" : "Offline"}
+                {data.isActive && data.faceDetected ? (
+                  data.roiDebug?.includes("s)") ? `Cal ${data.roiDebug.match(/\((\d+)s\)/)?.[1] || ""}s` : "Calibrating"
+                ) : data.isActive ? "Detecting" : "Offline"}
               </div>
               <div
                 className="flex gap-0.5 mt-0.5"
