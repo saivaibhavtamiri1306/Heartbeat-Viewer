@@ -4,11 +4,15 @@ import HeartbeatMonitor from "../components/HeartbeatMonitor";
 import WebcamFeed from "../components/WebcamFeed";
 import InterviewChat, { ChatMessage } from "../components/InterviewChat";
 import StudentAnalytics from "../components/StudentAnalytics";
+import AnswerTimer from "../components/AnswerTimer";
+import EyeContactIndicator from "../components/EyeContactIndicator";
+import InterviewReport, { type AnswerEvaluation } from "../components/InterviewReport";
 import { useWebcam } from "../hooks/useWebcam";
 import { useHeartbeat } from "../hooks/useHeartbeat";
 import { useFaceDetection } from "../hooks/useFaceDetection";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import { useTTS } from "../hooks/useTTS";
+import { useEyeContact } from "../hooks/useEyeContact";
 import type { FaceBox } from "../hooks/useFaceDetection";
 import {
   EMPATHY_RESPONSES,
@@ -43,6 +47,7 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
   const face = useFaceDetection(videoRef);
   const { data: speech, startListening, stopListening, clearCurrentAnswer } = useSpeechRecognition();
   const tts = useTTS();
+  const eyeContact = useEyeContact(face);
 
   useEffect(() => { faceBoxRef.current     = face.box         ?? null; }, [face.box]);
   useEffect(() => { foreheadBoxRef.current = face.foreheadBox ?? null; }, [face.foreheadBox]);
@@ -79,6 +84,16 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
   const consecutiveStressRef = useRef(0);
   const activeQuestionRef = useRef<ReturnType<typeof getAdaptiveQuestion>>(null);
   const wasAdaptiveRef = useRef(false);
+  const [showReport, setShowReport] = useState(false);
+  const [evaluations, setEvaluations] = useState<AnswerEvaluation[]>([]);
+  const [adaptiveTriggerCount, setAdaptiveTriggerCount] = useState(0);
+  const [bluffTriggerCount, setBluffTriggerCount] = useState(0);
+  const [waitingForAnswer, setWaitingForAnswer] = useState(false);
+  const [followUpCount, setFollowUpCount] = useState(0);
+  const questionStartRef = useRef(Date.now());
+  const fullBpmHistoryRef = useRef<number[]>([]);
+
+  const answerTimeLimit = config.difficulty === "hard" ? 60 : config.difficulty === "easy" ? 120 : 90;
 
   const [questions] = useState(() =>
     getFilteredQuestions(domain.id, config.topics, config.difficulty)
@@ -294,6 +309,8 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
       baselineBpmRef.current = bpm;
     }
 
+    fullBpmHistoryRef.current.push(bpm);
+
     const history = bpmHistoryRef.current;
     history.push(bpm);
     if (history.length > 30) history.shift();
@@ -399,7 +416,13 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
       setAvatarEmotion("neutral");
     }
 
+    if (didAdapt) {
+      setAdaptiveTriggerCount(c => c + 1);
+    }
+
     await speakMessage(q.text, q.avatarName, false, q.avatarIndex ?? 0);
+    questionStartRef.current = Date.now();
+    setWaitingForAnswer(true);
     if (didAdapt) {
       setTimeout(() => setAdaptiveMode("normal"), 5000);
     }
@@ -418,15 +441,16 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
     const text = (userInput || speech.finalText).trim();
     if (!text || phase !== "active") return;
 
-    // Stop mic on submit
     if (micOn) { stopListening(); setMicOn(false); }
     clearCurrentAnswer();
     setUserInput("");
+    setWaitingForAnswer(false);
 
     addMessage({ role: "candidate", text });
     setAnswerCount(c => c + 1);
 
-    // Score update: also weight by vocabulary & confidence from speech analytics
+    const timeTaken = Math.round((Date.now() - questionStartRef.current) / 1000);
+
     const vocabBonus = Math.round(speech.analytics.vocabularyScore * 0.04);
     const confBonus = Math.round(speech.analytics.confidenceScore * 0.04);
     setScore(prev => ({
@@ -439,23 +463,109 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
     const wasAdaptive = wasAdaptiveRef.current;
     await new Promise(r => setTimeout(r, 700));
 
+    fetch("/api/evaluate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question: currentQ?.text || "", answer: text, domain: domain.id }),
+    })
+      .then(r => r.json())
+      .then(ev => {
+        setEvaluations(prev => [...prev, {
+          question: currentQ?.text || "",
+          answer: text,
+          score: ev.score || 5,
+          strengths: ev.strengths || "",
+          weaknesses: ev.weaknesses || "",
+          suggestion: ev.suggestion || "",
+          timeTaken,
+          avatarName: currentQ?.avatarName,
+        }]);
+        if (ev.score) {
+          setScore(prev => ({
+            ...prev,
+            technical: Math.min(100, prev.technical + Math.max(0, ev.score - 5)),
+            communication: Math.min(100, prev.communication + Math.max(0, ev.score - 6)),
+          }));
+        }
+      })
+      .catch(() => {
+        setEvaluations(prev => [...prev, {
+          question: currentQ?.text || "", answer: text, score: 5,
+          strengths: "Answer provided", weaknesses: "", suggestion: "",
+          timeTaken, avatarName: currentQ?.avatarName,
+        }]);
+      });
+
     if (currentQ?.isBullshitTrigger && text.length > 20) {
       setBluffDetected(true);
+      setBluffTriggerCount(c => c + 1);
       setAvatarEmotion("curious");
       addMessage({ role: "system", text: "🔍 BULLSHIT DETECTOR TRIGGERED — DRILLING DEEPER" });
       const drillDown = BLUFF_RESPONSES[Math.floor(Math.random() * BLUFF_RESPONSES.length)];
       await speakMessage(drillDown, currentQ.avatarName, true);
       setTimeout(() => setBluffDetected(false), 8000);
+    } else if (followUpCount < 2 && text.length > 30 && Math.random() < 0.4) {
+      try {
+        addMessage({ role: "system", text: "🔄 AI FOLLOW-UP INCOMING..." });
+        const resp = await fetch("/api/followup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            question: currentQ?.text || "",
+            answer: text,
+            domain: domain.id,
+            difficulty: config.difficulty,
+            avatarName: currentQ?.avatarName,
+          }),
+        });
+        if (resp.ok) {
+          const { followUp, avatarName } = await resp.json();
+          if (followUp) {
+            setFollowUpCount(c => c + 1);
+            activeQuestionRef.current = { ...currentQ!, text: followUp, id: `followup-${Date.now()}` };
+            wasAdaptiveRef.current = true;
+            await speakMessage(followUp, avatarName || currentQ?.avatarName, false, currentQ?.avatarIndex ?? 0);
+            questionStartRef.current = Date.now();
+            setWaitingForAnswer(true);
+            return;
+          }
+        }
+      } catch {
+      }
+      const nextIndex = wasAdaptive ? currentQuestionIndex : currentQuestionIndex + 1;
+      wasAdaptiveRef.current = false;
+      setFollowUpCount(0);
+      await askNextQuestion(nextIndex);
     } else {
       const nextIndex = wasAdaptive ? currentQuestionIndex : currentQuestionIndex + 1;
       wasAdaptiveRef.current = false;
+      setFollowUpCount(0);
       await askNextQuestion(nextIndex);
     }
-  }, [userInput, speech, phase, micOn, questions, currentQuestionIndex,
-      addMessage, speakMessage, askNextQuestion, stopListening, clearCurrentAnswer]);
+  }, [userInput, speech, phase, micOn, questions, currentQuestionIndex, domain.id, config.difficulty,
+      followUpCount, addMessage, speakMessage, askNextQuestion, stopListening, clearCurrentAnswer]);
+
+  const handleTimeUp = useCallback(() => {
+    if (phase !== "active" || !waitingForAnswer) return;
+    setWaitingForAnswer(false);
+    addMessage({ role: "system", text: "⏰ TIME'S UP — Moving to next question" });
+    const wasAdaptive = wasAdaptiveRef.current;
+    const nextIndex = wasAdaptive ? currentQuestionIndex : currentQuestionIndex + 1;
+    wasAdaptiveRef.current = false;
+    setFollowUpCount(0);
+    setEvaluations(prev => [...prev, {
+      question: activeQuestionRef.current?.text || "",
+      answer: "(Time expired — no answer)",
+      score: 1, strengths: "", weaknesses: "No answer provided within time limit",
+      suggestion: "Practice answering within the allotted time",
+      timeTaken: answerTimeLimit, avatarName: activeQuestionRef.current?.avatarName,
+    }]);
+    askNextQuestion(nextIndex);
+  }, [phase, waitingForAnswer, currentQuestionIndex, answerTimeLimit, addMessage, askNextQuestion]);
 
   const endInterview = useCallback(async () => {
     setPhase("ended");
+    setWaitingForAnswer(false);
     stopWebcam(); stopHeartbeat(); stopListening(); setMicOn(false);
     tts.stop();
     const finalScore = Math.round((score.communication + score.technical + score.stress) / 3);
@@ -470,6 +580,7 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
       } ${heartData.stress === "high" ? "Biometrics showed elevated stress — practise deep breathing." : "Good composure throughout."}`,
       "HOLO-AI"
     );
+    setTimeout(() => setShowReport(true), 2000);
   }, [score, heartData.stress, speech.analytics, stopWebcam, stopHeartbeat, stopListening, addMessage, speakMessage]);
 
   const formatTime = (s: number) => `${Math.floor(s/60).toString().padStart(2,"0")}:${(s%60).toString().padStart(2,"0")}`;
@@ -503,6 +614,12 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
           )}
         </div>
         <div className="flex items-center gap-3 text-xs font-mono text-cyan-500/70">
+          <AnswerTimer
+            isActive={waitingForAnswer && phase === "active"}
+            maxTime={answerTimeLimit}
+            onTimeUp={handleTimeUp}
+            difficulty={config.difficulty}
+          />
           <span>{formatTime(elapsedSeconds)}</span>
           <span>Q {Math.min(currentQuestionIndex + 1, questions.length)}/{questions.length}</span>
           {bluffDetected && (
@@ -558,6 +675,7 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
           )}
 
           <HeartbeatMonitor data={heartData} onPanic={panic} onCalm={calm} />
+          <EyeContactIndicator data={eyeContact} />
 
           {/* Live Scores */}
           <div className="flex flex-col gap-2 p-3 rounded-lg border border-cyan-500/20 bg-black/30">
@@ -755,7 +873,12 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
           </div>
 
           {phase === "ended" && (
-            <div className="shrink-0 p-3 border-t border-cyan-500/20">
+            <div className="shrink-0 p-3 border-t border-cyan-500/20 flex flex-col gap-2">
+              <button onClick={() => setShowReport(true)}
+                className="w-full py-2.5 rounded-lg font-bold text-sm uppercase tracking-widest transition-all"
+                style={{ background: "rgba(119,0,255,0.15)", border: "1px solid rgba(119,0,255,0.4)", color: "#7700ff" }}>
+                View Full Report
+              </button>
               <button onClick={onEnd}
                 className="w-full py-2.5 rounded-lg font-bold text-sm uppercase tracking-widest transition-all"
                 style={{ background: "rgba(0,212,255,0.15)", border: "1px solid rgba(0,212,255,0.4)", color: "#00d4ff" }}>
@@ -765,6 +888,23 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
           )}
         </div>
       </div>
+
+      {showReport && (
+        <InterviewReport
+          domain={domain}
+          difficulty={config.difficulty}
+          score={score}
+          analytics={speech.analytics}
+          eyeContact={eyeContact}
+          bpmHistory={fullBpmHistoryRef.current}
+          sessionTime={elapsedSeconds}
+          answerCount={answerCount}
+          evaluations={evaluations}
+          adaptiveTriggers={adaptiveTriggerCount}
+          bluffTriggers={bluffTriggerCount}
+          onClose={onEnd}
+        />
+      )}
     </div>
   );
 }

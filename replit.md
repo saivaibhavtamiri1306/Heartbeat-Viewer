@@ -43,11 +43,20 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 - **Adaptive Biometric Difficulty**: Dynamically adjusts question difficulty based on real-time heart rate. When stressed (HR > baseline+15 or >95 BPM for 2+ consecutive questions), injects easier "cooling" questions with empathetic transitions. When calm (HR < baseline+5 or <80 BPM for 3+ questions), escalates to harder questions with stern transitions. 45-second cooldown between adaptations. UI shows ⬇ Cooling / ⬆ Escalating indicators.
 - **Bullshit Detector**: Bluff detection with stress analysis from rPPG data.
 - **Speech Recognition**: Mic-based input via Web Speech API.
+- **AI Follow-Up Questions**: After each answer, ~40% chance AI generates a contextual follow-up based on your actual response. Up to 2 consecutive follow-ups. Uses GPT-4o-mini via `/api/followup`.
+- **AI Answer Evaluation**: Each answer is scored 1-10 by AI with strengths, weaknesses, and suggestions via `/api/evaluate`. Scores feed into live scoring.
+- **Answer Timer**: Per-question countdown timer (easy=120s, medium=90s, hard=60s). Visual urgency indicators — yellow at 15s, red pulsing at 5s. Auto-advances on timeout with penalty score.
+- **Eye Contact Detection**: Tracks face position relative to camera center. Shows live "ENGAGED"/"AWAY" status with percentage bar. Properly accounts for no-face intervals.
+- **Post-Interview Report**: Comprehensive analytics dashboard showing: overall grade (A+ to F), core score bars, BPM timeline chart, answer-by-answer breakdown with AI scores, speech stats (WPM, filler words), eye contact %, adaptive/bluff trigger counts, and personalized recommendations.
 
 ### Key Files
 - `src/hooks/useHeartbeat.ts` — rPPG algorithm (POS, Butterworth, consensus BPM)
 - `src/hooks/useTTS.ts` — AI TTS hook with OpenAI voice playback + browser fallback
+- `src/hooks/useEyeContact.ts` — Eye contact detection from face position
 - `src/components/Avatar3D.tsx` — 3D avatar with HumanHead, panel mode, lip sync, subtitles
+- `src/components/InterviewReport.tsx` — Full post-interview analytics report
+- `src/components/AnswerTimer.tsx` — Per-question countdown timer
+- `src/components/EyeContactIndicator.tsx` — Live eye contact status indicator
 - `src/pages/InterviewConfig.tsx` — Pre-interview config (background, difficulty, topics)
 - `src/pages/Interview.tsx` — Main interview page (speech, questions, avatar wiring)
 - `src/hooks/useFaceDetection.ts` — MediaPipe face landmark detection
@@ -57,8 +66,10 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 
 ### API Server (`artifacts/api-server`)
 - `/api/tts` — POST `{text, voice}` → audio/mpeg. Lazy-loads OpenAI module. Max 2000 chars.
+- `/api/followup` — POST `{question, answer, domain, difficulty, avatarName}` → `{followUp, avatarName}`. AI-generated follow-up question. Rate-limited (30 req/min).
+- `/api/evaluate` — POST `{question, answer, domain}` → `{score, strengths, weaknesses, suggestion}`. AI answer evaluation. Rate-limited (30 req/min).
 - Vite proxy in holo-sync forwards `/api` → `http://localhost:8080`
-- Uses `@workspace/integrations-openai-ai-server` lib for OpenAI TTS (gpt-audio model)
+- Uses `@workspace/integrations-openai-ai-server` lib for OpenAI (TTS + chat completions)
 
 ### Architecture Notes
 - Avatar3D props: `activeSpeakerIndex`, `mouthOpenness`, `spokenText` for speaker tracking/lip sync
