@@ -52,6 +52,12 @@ export default function Interview({ domain, onEnd }: InterviewProps) {
   const [userInput, setUserInput] = useState("");
   const [micOn, setMicOn] = useState(false);
   const [answerCount, setAnswerCount] = useState(0);
+  const [activeSpeakerIndex, setActiveSpeakerIndex] = useState(0);
+  const [mouthOpenness, setMouthOpenness] = useState(0);
+  const [spokenText, setSpokenText] = useState("");
+  const mouthAnimRef = useRef<number>(0);
+  const mouthAnimActiveRef = useRef(false);
+  const speechRunIdRef = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const questions = QUESTIONS[domain.id] || QUESTIONS.swe;
@@ -92,41 +98,99 @@ export default function Interview({ domain, onEnd }: InterviewProps) {
     }]);
   }, []);
 
-  const speakMessage = useCallback(async (text: string, avatarName?: string, flagged?: boolean) => {
-    setIsTyping(true);
-    const delay = Math.min(1800, text.length * 22);
-    await new Promise(r => setTimeout(r, delay));
-    setIsTyping(false);
-    setIsSpeaking(true);
-    addMessage({ role: "avatar", text, avatarName, flagged });
-
-    // Pause mic while avatar speaks
-    if (micOn) stopListening();
-
-    if ("speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-      const utter = new SpeechSynthesisUtterance(text);
-      utter.rate = 0.88;
-      utter.pitch = 1.05;
-      const voices = window.speechSynthesis.getVoices();
-      const pick = voices.find(v => v.lang.startsWith("en") && v.name.includes("Google"))
-        || voices.find(v => v.lang.startsWith("en"))
-        || voices[0];
-      if (pick) utter.voice = pick;
-      utter.onend = () => {
-        setIsSpeaking(false);
-        // Resume mic after avatar finishes speaking
-        if (micOn) { clearCurrentAnswer(); startListening(); }
-      };
-      utter.onerror = () => setIsSpeaking(false);
-      window.speechSynthesis.speak(utter);
-    } else {
-      setTimeout(() => {
-        setIsSpeaking(false);
-        if (micOn) { clearCurrentAnswer(); startListening(); }
-      }, 3200);
+  const startMouthAnimation = useCallback(() => {
+    if (mouthAnimActiveRef.current) {
+      cancelAnimationFrame(mouthAnimRef.current);
     }
-  }, [addMessage, micOn, startListening, stopListening, clearCurrentAnswer]);
+    mouthAnimActiveRef.current = true;
+    let frame = 0;
+    const animate = () => {
+      if (!mouthAnimActiveRef.current) return;
+      frame++;
+      const t = frame * 0.033;
+      const open = 0.2 + Math.abs(Math.sin(t * 8)) * 0.5 + Math.abs(Math.sin(t * 13)) * 0.3;
+      setMouthOpenness(open);
+      mouthAnimRef.current = requestAnimationFrame(animate);
+    };
+    mouthAnimRef.current = requestAnimationFrame(animate);
+  }, []);
+
+  const stopMouthAnimation = useCallback(() => {
+    mouthAnimActiveRef.current = false;
+    cancelAnimationFrame(mouthAnimRef.current);
+    setMouthOpenness(0);
+  }, []);
+
+  const speakMessage = useCallback((text: string, avatarName?: string, flagged?: boolean, avatarIndex?: number): Promise<void> => {
+    return new Promise(async (resolve) => {
+      const runId = ++speechRunIdRef.current;
+
+      setIsTyping(true);
+      const delay = Math.min(1800, text.length * 22);
+      await new Promise(r => setTimeout(r, delay));
+
+      if (runId !== speechRunIdRef.current) { resolve(); return; }
+
+      setIsTyping(false);
+      setIsSpeaking(true);
+      setSpokenText(text);
+      if (avatarIndex !== undefined) setActiveSpeakerIndex(avatarIndex);
+      addMessage({ role: "avatar", text, avatarName, flagged });
+
+      startMouthAnimation();
+
+      if (micOn) stopListening();
+
+      const cleanupSpeech = () => {
+        if (runId !== speechRunIdRef.current) return;
+        setIsSpeaking(false);
+        setSpokenText("");
+        stopMouthAnimation();
+      };
+
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+
+        await new Promise(r => setTimeout(r, 50));
+        if (runId !== speechRunIdRef.current) { resolve(); return; }
+
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.rate = 0.88;
+        utter.pitch = 1.05;
+        const voices = window.speechSynthesis.getVoices();
+        const pick = voices.find(v => v.lang.startsWith("en") && v.name.includes("Google"))
+          || voices.find(v => v.lang.startsWith("en"))
+          || voices[0];
+        if (pick) utter.voice = pick;
+
+        utter.onboundary = (ev) => {
+          if (runId !== speechRunIdRef.current) return;
+          if (ev.name === "word") {
+            const spoken = text.slice(0, ev.charIndex + ev.charLength);
+            const remaining = text.slice(ev.charIndex + ev.charLength);
+            setSpokenText(spoken + (remaining ? "..." : ""));
+          }
+        };
+
+        utter.onend = () => {
+          cleanupSpeech();
+          if (runId === speechRunIdRef.current && micOn) { clearCurrentAnswer(); startListening(); }
+          resolve();
+        };
+        utter.onerror = () => {
+          cleanupSpeech();
+          resolve();
+        };
+        window.speechSynthesis.speak(utter);
+      } else {
+        setTimeout(() => {
+          cleanupSpeech();
+          if (runId === speechRunIdRef.current && micOn) { clearCurrentAnswer(); startListening(); }
+          resolve();
+        }, 3200);
+      }
+    });
+  }, [addMessage, micOn, startListening, stopListening, clearCurrentAnswer, startMouthAnimation, stopMouthAnimation]);
 
   useEffect(() => {
     const init = async () => {
@@ -154,6 +218,7 @@ export default function Interview({ domain, onEnd }: InterviewProps) {
     return () => {
       stopWebcam(); stopHeartbeat();
       stopListening();
+      stopMouthAnimation();
       window.speechSynthesis?.cancel();
     };
   }, []);
@@ -176,6 +241,7 @@ export default function Interview({ domain, onEnd }: InterviewProps) {
     if (index >= questions.length) { endInterview(); return; }
     const q = questions[index];
     setCurrentQuestionIndex(index);
+    if (q.avatarIndex !== undefined) setActiveSpeakerIndex(q.avatarIndex);
     if (q.isInterrupt && domain.panelMode) {
       setAvatarEmotion("stern");
       addMessage({ role: "system", text: `⚡ INTERRUPT — ${q.avatarName} INTERVENES` });
@@ -183,7 +249,7 @@ export default function Interview({ domain, onEnd }: InterviewProps) {
     } else {
       setAvatarEmotion("neutral");
     }
-    await speakMessage(q.text, q.avatarName);
+    await speakMessage(q.text, q.avatarName, false, q.avatarIndex ?? 0);
   }, [questions, domain.panelMode, speakMessage, addMessage]);
 
   const triggerEmpathy = useCallback(async () => {
@@ -357,6 +423,9 @@ export default function Interview({ domain, onEnd }: InterviewProps) {
               bpm={heartData.bpm ?? 72}
               panelMode={domain.panelMode}
               panelAvatars={panelAvatars}
+              activeSpeakerIndex={activeSpeakerIndex}
+              mouthOpenness={mouthOpenness}
+              spokenText={spokenText}
             />
 
             <div className="absolute top-3 left-3 flex flex-col gap-1 pointer-events-none">
