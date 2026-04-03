@@ -307,7 +307,7 @@ export default function Interview({ domain, onEnd }: InterviewProps) {
             <Avatar3D
               emotion={avatarEmotion}
               isSpeaking={isSpeaking}
-              bpm={heartData.bpm}
+              bpm={heartData.bpm ?? 72}
               panelMode={domain.panelMode}
               panelAvatars={panelAvatars}
             />

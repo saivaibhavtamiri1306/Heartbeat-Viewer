@@ -11,15 +11,16 @@ export default function HeartbeatMonitor({ data, onPanic, onCalm }: HeartbeatMon
   const ecgCanvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
   const trailRef = useRef<number[]>([]);
-  const [displayBpm, setDisplayBpm] = useState(data.bpm);
+  const [displayBpm, setDisplayBpm] = useState<number | null>(data.bpm);
 
   // Smooth BPM display counter
   useEffect(() => {
+    if (data.bpm === null) return;
     let targetBpm = data.bpm;
-    let current = displayBpm;
+    let current = displayBpm ?? targetBpm;
     const interval = setInterval(() => {
       const diff = targetBpm - current;
-      if (Math.abs(diff) < 1) { current = targetBpm; }
+      if (Math.abs(diff) < 0.5) { current = targetBpm; }
       else { current += diff * 0.15; }
       setDisplayBpm(Math.round(current));
     }, 50);
@@ -184,22 +185,49 @@ export default function HeartbeatMonitor({ data, onPanic, onCalm }: HeartbeatMon
       <div className="flex items-stretch gap-2 px-3">
         {/* BPM Display */}
         <div className="flex flex-col justify-center items-start w-20 shrink-0">
-          <div
-            className="text-5xl font-black font-mono leading-none tabular-nums"
-            style={{
-              color: stressColor,
-              textShadow: `0 0 20px ${stressColor}88, 0 0 40px ${stressColor}44`,
-            }}
-          >
-            {displayBpm}
-          </div>
-          <div className="text-xs text-cyan-500/60 font-mono uppercase tracking-widest mt-1">BPM</div>
-          <div className="flex items-center gap-1 mt-1">
-            <span className="text-xs font-mono" style={{ color: stressColor }}>{trendIcon}</span>
-            <span className="text-xs font-mono text-cyan-600">
-              {data.trend.toUpperCase()}
-            </span>
-          </div>
+          {data.calibrating || displayBpm === null ? (
+            <div className="flex flex-col gap-1">
+              <div
+                className="text-2xl font-black font-mono leading-none tracking-widest animate-pulse"
+                style={{ color: "#00d4ff88" }}
+              >
+                ---
+              </div>
+              <div className="text-xs font-mono text-cyan-600/70 uppercase tracking-wider leading-tight">
+                {data.isActive && data.faceDetected ? "Calibrating" : data.isActive ? "Detecting" : "Offline"}
+              </div>
+              <div
+                className="flex gap-0.5 mt-0.5"
+              >
+                {[0, 1, 2].map(i => (
+                  <div
+                    key={i}
+                    className="w-1.5 h-1.5 rounded-full bg-cyan-500/60 animate-bounce"
+                    style={{ animationDelay: `${i * 0.2}s` }}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : (
+            <>
+              <div
+                className="text-5xl font-black font-mono leading-none tabular-nums"
+                style={{
+                  color: stressColor,
+                  textShadow: `0 0 20px ${stressColor}88, 0 0 40px ${stressColor}44`,
+                }}
+              >
+                {displayBpm}
+              </div>
+              <div className="text-xs text-cyan-500/60 font-mono uppercase tracking-widest mt-1">BPM</div>
+              <div className="flex items-center gap-1 mt-1">
+                <span className="text-xs font-mono" style={{ color: stressColor }}>{trendIcon}</span>
+                <span className="text-xs font-mono text-cyan-600">
+                  {data.trend.toUpperCase()}
+                </span>
+              </div>
+            </>
+          )}
         </div>
 
         {/* ECG Canvas */}
