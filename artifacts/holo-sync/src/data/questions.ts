@@ -214,6 +214,29 @@ export const EMPATHY_RESPONSES = [
   "It seems like you need a moment. Take it. There is no rush. Good interviewers want you to succeed.",
 ];
 
+export const HR_SPIKE_RESPONSES = [
+  "I notice your heart rate just jumped up. Are you feeling nervous about this topic? Take a moment if you need to.",
+  "Your biometrics show a sudden increase in heart rate. That's interesting — this topic seems to be challenging for you. Let's explore why.",
+  "I can see your pulse is climbing. Is this question hitting close to home? Remember, honesty is what we value most.",
+  "Your heart rate spiked just now. Are you uncertain about your answer, or is something else on your mind?",
+  "Interesting — your heartbeat accelerated noticeably. This tells me this area might need more preparation. Let's work through it.",
+  "I'm detecting elevated cardiovascular activity. Don't worry — pressure is part of the process. Channel that energy into your response.",
+];
+
+export const HR_DROP_RESPONSES = [
+  "Good — I can see your heart rate is settling down. You seem more comfortable now. Let's keep this momentum going.",
+  "Your pulse has calmed considerably. That's a sign of composure. You're finding your rhythm — excellent.",
+  "I notice your heart rate dropped. You seem more confident with this topic. That's showing through in your answers.",
+  "Your biometrics show you're relaxing. That's great — confident candidates give better answers. Continue.",
+  "Your cardiovascular data shows you're settling in nicely. Comfort breeds clarity — keep going.",
+];
+
+export const HR_ELEVATED_RESPONSES = [
+  "Your heart rate has been elevated for a while now. Would you like to take a short pause before we continue?",
+  "I've been monitoring your biometrics, and your heart rate remains high. Let's slow down — take a deep breath with me.",
+  "Sustained elevated heart rate detected. This is a marathon, not a sprint. Pace yourself — we have time.",
+];
+
 export const BLUFF_RESPONSES = [
   "That is a strong claim. Can you be more specific? Walk me through exactly how you implemented that — step by step.",
   "Interesting. You mentioned that concept — can you define it precisely and give me a concrete example from your own work?",

@@ -13,6 +13,9 @@ import {
   QUESTIONS,
   EMPATHY_RESPONSES,
   BLUFF_RESPONSES,
+  HR_SPIKE_RESPONSES,
+  HR_DROP_RESPONSES,
+  HR_ELEVATED_RESPONSES,
   PANEL_AVATARS,
   type Domain,
 } from "../data/questions";
@@ -58,6 +61,9 @@ export default function Interview({ domain, onEnd }: InterviewProps) {
   const mouthAnimRef = useRef<number>(0);
   const mouthAnimActiveRef = useRef(false);
   const speechRunIdRef = useRef(0);
+  const bpmHistoryRef = useRef<number[]>([]);
+  const lastHrCommentRef = useRef(0);
+  const baselineBpmRef = useRef<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const questions = QUESTIONS[domain.id] || QUESTIONS.swe;
@@ -236,6 +242,75 @@ export default function Interview({ domain, onEnd }: InterviewProps) {
       triggerEmpathy();
     }
   }, [heartData.stress, phase]);
+
+  const triggerHrComment = useCallback(async (type: "spike" | "drop" | "elevated") => {
+    if (isSpeaking || isTyping) return;
+    lastHrCommentRef.current = Date.now();
+
+    let responses: string[];
+    let systemMsg: string;
+    let emotion: AvatarEmotion;
+
+    if (type === "spike") {
+      responses = HR_SPIKE_RESPONSES;
+      systemMsg = "📈 HEART RATE INCREASE DETECTED — INTERVIEWER RESPONDS";
+      emotion = "curious";
+    } else if (type === "drop") {
+      responses = HR_DROP_RESPONSES;
+      systemMsg = "📉 HEART RATE DECREASE DETECTED — INTERVIEWER RESPONDS";
+      emotion = "empathetic";
+    } else {
+      responses = HR_ELEVATED_RESPONSES;
+      systemMsg = "⚠ SUSTAINED ELEVATED HEART RATE — INTERVIEWER CHECK-IN";
+      emotion = "empathetic";
+    }
+
+    const bpm = heartData.bpm ?? 0;
+    const response = responses[Math.floor(Math.random() * responses.length)];
+    const bpmNote = bpm > 0 ? ` Your current heart rate is ${bpm} BPM.` : "";
+
+    setAvatarEmotion(emotion);
+    addMessage({ role: "system", text: systemMsg });
+    await speakMessage(response + bpmNote, domain.panelMode ? "CHAIRMAN" : "HOLO-AI");
+    setTimeout(() => setAvatarEmotion("neutral"), 4000);
+  }, [isSpeaking, isTyping, heartData.bpm, addMessage, speakMessage, domain.panelMode]);
+
+  useEffect(() => {
+    if (phase !== "active") return;
+    const bpm = heartData.bpm;
+    if (!bpm || bpm <= 0 || heartData.calibrating) return;
+
+    if (baselineBpmRef.current === null) {
+      baselineBpmRef.current = bpm;
+    }
+
+    const history = bpmHistoryRef.current;
+    history.push(bpm);
+    if (history.length > 30) history.shift();
+
+    const now = Date.now();
+    const cooldown = 30000;
+    if (now - lastHrCommentRef.current < cooldown) return;
+    if (history.length < 5) return;
+
+    const recent = history.slice(-5);
+    const older = history.slice(-15, -5);
+    if (older.length < 3) return;
+
+    const recentAvg = recent.reduce((a, b) => a + b, 0) / recent.length;
+    const olderAvg = older.reduce((a, b) => a + b, 0) / older.length;
+    const baseline = baselineBpmRef.current;
+    const diff = recentAvg - olderAvg;
+
+    if (diff > 12 || (recentAvg > baseline + 20 && diff > 5)) {
+      triggerHrComment("spike");
+    } else if (diff < -10 || (recentAvg < baseline - 10 && diff < -5)) {
+      triggerHrComment("drop");
+    } else if (recentAvg > 100 && history.length >= 20) {
+      const allHigh = history.slice(-20).every(b => b > 95);
+      if (allHigh) triggerHrComment("elevated");
+    }
+  }, [heartData.bpm, heartData.calibrating, phase, triggerHrComment]);
 
   const askNextQuestion = useCallback(async (index: number) => {
     if (index >= questions.length) { endInterview(); return; }

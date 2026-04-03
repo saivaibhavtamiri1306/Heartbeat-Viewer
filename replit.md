@@ -37,6 +37,7 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 - **Cross-Fire Panel Mode**: UPSC and NDA have 3-avatar panels. Active speaker is highlighted with glow + scale. Other avatars are dimmed.
 - **Lip Sync**: Mouth animation driven by `requestAnimationFrame` loop synced to SpeechSynthesis `onboundary` events. Uses speech run ID tokens to prevent concurrency bugs.
 - **Subtitles**: Spoken text displayed as overlay on the 3D scene, progressively updated word-by-word.
+- **Heart Rate Reactive Interviewer**: Monitors BPM history and detects spikes (>12 BPM increase), drops (>10 BPM decrease), and sustained elevation (>100 BPM for 20+ readings). Interviewer dynamically comments on heart rate changes with contextual responses and states your current BPM. 30-second cooldown between comments.
 - **Bullshit Detector**: Bluff detection with stress analysis from rPPG data.
 - **Speech Recognition**: Mic-based input via Web Speech API.
 
