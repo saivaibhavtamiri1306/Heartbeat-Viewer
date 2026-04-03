@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "fngbHVXfnESRQmMoZFimb"
+uri = "file://HOLO_SYNC_DOCUMENTATION.md"
+type = "text"
+title = "Holo-Sync Complete Documentation (Hackathon Ready)"
