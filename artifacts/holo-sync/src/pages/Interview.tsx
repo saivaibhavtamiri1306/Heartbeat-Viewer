@@ -61,7 +61,7 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [bluffDetected, setBluffDetected] = useState(false);
   const [pressureMode, setPressureMode] = useState(false);
-  const stressMarkersRef = useRef<{questionIndex: number; bpm: number; type: string; timestamp: number}[]>([]);
+  const stressMarkersRef = useRef<{questionIndex: number; bpm: number; type: string; timestamp: number; confidence?: number}[]>([]);
   const [lastStressCheck, setLastStressCheck] = useState(0);
   const [score, setScore] = useState({ communication: 0, technical: 0, stress: 100 });
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -255,20 +255,23 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
     let systemMsg: string;
     let emotion: AvatarEmotion;
 
+    const conf = heartData.confidence ?? 0;
+    const confLabel = `Confidence: ${conf}%`;
+
     if (type === "spike") {
       responses = HR_SPIKE_RESPONSES;
-      systemMsg = "📈 HEART RATE SPIKE — PRESSURE POINT DETECTED";
+      systemMsg = `📈 HEART RATE SPIKE DETECTED (${confLabel}) — PRESSURE POINT IDENTIFIED`;
       emotion = "stern";
-      stressMarkersRef.current.push({ questionIndex: currentQuestionIndex, bpm: heartData.bpm ?? 0, type: "hr_spike", timestamp: Date.now() });
+      stressMarkersRef.current.push({ questionIndex: currentQuestionIndex, bpm: heartData.bpm ?? 0, type: "hr_spike", timestamp: Date.now(), confidence: conf });
     } else if (type === "drop") {
       responses = HR_DROP_RESPONSES;
-      systemMsg = "📉 HEART RATE DROP — COMPOSURE RESTORED";
+      systemMsg = `📉 HEART RATE DROP (${confLabel}) — COMPOSURE RESTORED`;
       emotion = "neutral";
     } else {
       responses = HR_ELEVATED_RESPONSES;
-      systemMsg = "⚠ SUSTAINED ELEVATED HEART RATE — ENDURANCE TEST";
+      systemMsg = `⚠ SUSTAINED ELEVATED HR (${confLabel}) — ENDURANCE TEST`;
       emotion = "stern";
-      stressMarkersRef.current.push({ questionIndex: currentQuestionIndex, bpm: heartData.bpm ?? 0, type: "sustained_stress", timestamp: Date.now() });
+      stressMarkersRef.current.push({ questionIndex: currentQuestionIndex, bpm: heartData.bpm ?? 0, type: "sustained_stress", timestamp: Date.now(), confidence: conf });
     }
 
     const bpm = heartData.bpm ?? 0;
@@ -351,7 +354,7 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
             consecutiveStressRef.current = 0;
             didAdapt = true;
           }
-          stressMarkersRef.current.push({ questionIndex: index, bpm: Math.round(recentBpm), type: "composure_break", timestamp: now });
+          stressMarkersRef.current.push({ questionIndex: index, bpm: Math.round(recentBpm), type: "composure_break", timestamp: now, confidence: heartData.confidence ?? 0 });
         }
       } else if (recentBpm < calmThreshold) {
         consecutiveCalmRef.current++;
@@ -383,7 +386,8 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
 
     if (transitionMsg) {
       const bpmNote = recentBpm > 0 ? ` Your current heart rate is ${Math.round(recentBpm)} BPM.` : "";
-      addMessage({ role: "system", text: `🧬 ⬆ PRESSURE ESCALATION — BIOMETRIC DIFFICULTY INCREASE` });
+      const adaptConf = heartData.confidence ?? 0;
+      addMessage({ role: "system", text: `🧬 ⬆ PRESSURE ESCALATION (Confidence: ${adaptConf}%) — BIOMETRIC DIFFICULTY INCREASE` });
       setAvatarEmotion("stern");
       await speakMessage(transitionMsg + bpmNote, domain.panelMode ? "CHAIRMAN" : "HOLO-AI", false, 0);
       await new Promise(r => setTimeout(r, 600));
@@ -412,12 +416,13 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
   const triggerPressure = useCallback(async () => {
     setPressureMode(true);
     setAvatarEmotion("stern");
+    const conf = heartData.confidence ?? 0;
     const response = PRESSURE_RESPONSES[Math.floor(Math.random() * PRESSURE_RESPONSES.length)];
-    addMessage({ role: "system", text: "⚠ STRESS DETECTED — PRESSURE MAINTAINED (REAL INTERVIEW SIMULATION)" });
-    stressMarkersRef.current.push({ questionIndex: currentQuestionIndex, bpm: heartData.bpm ?? 0, type: "stress_detected", timestamp: Date.now() });
+    addMessage({ role: "system", text: `⚠ STRESS DETECTED (Confidence: ${conf}%) — PRESSURE MAINTAINED` });
+    stressMarkersRef.current.push({ questionIndex: currentQuestionIndex, bpm: heartData.bpm ?? 0, type: "stress_detected", timestamp: Date.now(), confidence: conf });
     await speakMessage(response, domain.panelMode ? "CHAIRMAN" : "HOLO-AI");
     setTimeout(() => { setPressureMode(false); setAvatarEmotion("neutral"); }, 5000);
-  }, [addMessage, speakMessage, currentQuestionIndex, heartData.bpm, domain.panelMode]);
+  }, [addMessage, speakMessage, currentQuestionIndex, heartData.bpm, heartData.confidence, domain.panelMode]);
 
   const handleSubmitAnswer = useCallback(async () => {
     const text = (userInput || speech.finalText).trim();

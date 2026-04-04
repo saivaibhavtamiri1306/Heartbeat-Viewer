@@ -18,6 +18,60 @@ interface StressMarker {
   bpm: number;
   type: string;
   timestamp: number;
+  confidence?: number;
+}
+
+interface SessionRecord {
+  date: string;
+  domain: string;
+  difficulty: string;
+  overall: number;
+  stressEndurance: number;
+  eyeContact: number;
+  composureBreaks: number;
+  avgBpm: number;
+  communication: number;
+  technical: number;
+  fillerCount: number;
+  speechRate: number;
+}
+
+function getSessionHistory(): SessionRecord[] {
+  try {
+    return JSON.parse(localStorage.getItem("holosync_sessions") || "[]");
+  } catch { return []; }
+}
+
+function saveSession(record: SessionRecord) {
+  const history = getSessionHistory();
+  history.push(record);
+  if (history.length > 20) history.splice(0, history.length - 20);
+  localStorage.setItem("holosync_sessions", JSON.stringify(history));
+}
+
+function computeProgress(current: SessionRecord, history: SessionRecord[]) {
+  const past = history.filter(h => h.domain === current.domain);
+  if (past.length < 1) return null;
+
+  const recent = past.slice(-3);
+  const avg = (arr: number[]) => arr.reduce((a, b) => a + b, 0) / arr.length;
+
+  const pastEye = avg(recent.map(s => s.eyeContact));
+  const pastEndurance = avg(recent.map(s => s.stressEndurance));
+  const pastOverall = avg(recent.map(s => s.overall));
+  const pastComm = avg(recent.map(s => s.communication));
+  const pastBreaks = avg(recent.map(s => s.composureBreaks));
+  const pastFiller = avg(recent.map(s => s.fillerCount));
+
+  return {
+    sessionCount: past.length + 1,
+    eyeContactDelta: Math.round(current.eyeContact - pastEye),
+    enduranceDelta: Math.round(current.stressEndurance - pastEndurance),
+    overallDelta: Math.round(current.overall - pastOverall),
+    commDelta: Math.round(current.communication - pastComm),
+    breaksDelta: Math.round(current.composureBreaks - pastBreaks),
+    fillerDelta: Math.round(current.fillerCount - pastFiller),
+  };
 }
 
 interface InterviewReportProps {
@@ -189,13 +243,39 @@ export default function InterviewReport({
 
   const avgTimePer = answerCount > 0 ? Math.round(sessionTime / answerCount) : 0;
 
-  const grade = overall >= 90 ? "A+" : overall >= 80 ? "A" : overall >= 70 ? "B+" :
-    overall >= 60 ? "B" : overall >= 50 ? "C" : overall >= 40 ? "D" : "F";
-  const gradeColor = overall >= 80 ? "#00ff88" : overall >= 60 ? "#00d4ff" : overall >= 40 ? "#ffaa00" : "#ff4444";
-
   const speechRate = analytics.wordCount > 0 && sessionTime > 0
     ? Math.round(analytics.wordCount / (sessionTime / 60))
     : 0;
+
+  const currentRecord: SessionRecord = {
+    date: new Date().toISOString(),
+    domain: domain.label,
+    difficulty,
+    overall,
+    stressEndurance: stressEndurance.overall,
+    eyeContact: eyeContact.percentage,
+    composureBreaks: composureBreaks.length,
+    avgBpm,
+    communication: score.communication,
+    technical: score.technical,
+    fillerCount: analytics.fillerCount,
+    speechRate,
+  };
+
+  const [progress, setProgress] = useState<ReturnType<typeof computeProgress>>(null);
+  const [sessionNum, setSessionNum] = useState(1);
+
+  useEffect(() => {
+    const history = getSessionHistory();
+    const prog = computeProgress(currentRecord, history);
+    setProgress(prog);
+    setSessionNum((history.filter(h => h.domain === domain.label).length) + 1);
+    saveSession(currentRecord);
+  }, []);
+
+  const grade = overall >= 90 ? "A+" : overall >= 80 ? "A" : overall >= 70 ? "B+" :
+    overall >= 60 ? "B" : overall >= 50 ? "C" : overall >= 40 ? "D" : "F";
+  const gradeColor = overall >= 80 ? "#00ff88" : overall >= 60 ? "#00d4ff" : overall >= 40 ? "#ffaa00" : "#ff4444";
 
   const seColor = stressEndurance.overall >= 70 ? "#00ff88" : stressEndurance.overall >= 50 ? "#ffaa00" : "#ff4444";
 
@@ -212,6 +292,8 @@ export default function InterviewReport({
             <span className="text-sm font-mono" style={{ color: domain.color }}>{domain.icon} {domain.label}</span>
             <span className="text-xs font-mono text-gray-500">|</span>
             <span className={`text-xs font-mono uppercase ${difficulty === "hard" ? "text-red-400" : difficulty === "easy" ? "text-green-400" : "text-yellow-400"}`}>{difficulty}</span>
+            <span className="text-xs font-mono text-gray-500">|</span>
+            <span className="text-xs font-mono text-cyan-400/60">Session #{sessionNum}</span>
           </div>
         </div>
 
@@ -284,6 +366,38 @@ export default function InterviewReport({
           </div>
         </div>
 
+        {progress && (
+          <div className="p-4 rounded-lg border border-green-500/20 bg-black/40 mb-6">
+            <div className="text-xs font-mono text-green-400/60 uppercase tracking-widest mb-3">📈 Progress Since Last {progress.sessionCount > 2 ? `${Math.min(progress.sessionCount - 1, 3)} Sessions` : "Session"}</div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {[
+                { label: "Eye Contact", delta: progress.eyeContactDelta, unit: "%" },
+                { label: "Stress Endurance", delta: progress.enduranceDelta, unit: "pts" },
+                { label: "Overall Score", delta: progress.overallDelta, unit: "pts" },
+                { label: "Communication", delta: progress.commDelta, unit: "pts" },
+                { label: "Composure Breaks", delta: progress.breaksDelta, unit: "", invert: true },
+                { label: "Filler Words", delta: progress.fillerDelta, unit: "", invert: true },
+              ].map(({ label, delta, unit, invert }) => {
+                const displayDelta = invert ? -delta : delta;
+                const improved = displayDelta > 0;
+                const neutral = displayDelta === 0;
+                return (
+                  <div key={label} className="flex items-center gap-2 p-2 rounded-lg border bg-black/30"
+                    style={{ borderColor: improved ? "rgba(0,255,136,0.15)" : neutral ? "rgba(128,128,128,0.15)" : "rgba(255,68,68,0.15)" }}>
+                    <div className="text-lg">{improved ? "📈" : neutral ? "➡" : "📉"}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-mono text-gray-400">{label}</div>
+                      <div className={`text-sm font-bold font-mono ${improved ? "text-green-400" : neutral ? "text-gray-400" : "text-red-400"}`}>
+                        {invert ? (delta < 0 ? `${Math.abs(delta)} fewer` : delta > 0 ? `${delta} more` : "Same") : `${displayDelta > 0 ? "+" : ""}${displayDelta}${unit}`}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <div className="p-4 rounded-lg border border-cyan-500/20 bg-black/40">
             <div className="text-xs font-mono text-cyan-400/60 uppercase tracking-widest mb-3">Core Scores</div>
@@ -324,6 +438,7 @@ export default function InterviewReport({
                   <div className="flex-1">
                     <div className="text-xs font-mono text-gray-300">
                       Q{m.questionIndex + 1} — Lost composure under pressure
+                      {m.confidence ? <span className="text-red-400/60 ml-2">(Confidence: {m.confidence}%)</span> : null}
                     </div>
                     <div className="text-xs font-mono text-gray-500">{m.bpm > 0 ? `${m.bpm} BPM` : "Elevated"}</div>
                   </div>
@@ -343,6 +458,7 @@ export default function InterviewReport({
                   <div className="flex-1">
                     <div className="text-xs font-mono text-gray-300">
                       Q{m.questionIndex + 1} — {m.type === "hr_spike" ? "Heart rate spike" : m.type === "sustained_stress" ? "Sustained elevated HR" : "Stress detected"}
+                      {m.confidence ? <span className="text-orange-400/60 ml-2">(Confidence: {m.confidence}%)</span> : null}
                     </div>
                     <div className="text-xs font-mono text-gray-500">{m.bpm > 0 ? `${m.bpm} BPM` : "Elevated"}</div>
                   </div>

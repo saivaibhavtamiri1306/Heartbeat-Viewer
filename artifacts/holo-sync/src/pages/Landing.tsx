@@ -115,12 +115,12 @@ export default function Landing({ onStart }: LandingProps) {
             className="text-base md:text-lg max-w-2xl leading-relaxed font-light"
             style={{ color: "rgba(180, 220, 240, 0.75)" }}
           >
-            Train to handle real interview pressure — your webcam tracks your heartbeat,
-            and our AI maintains or increases difficulty when you're stressed. No comfort. No shortcuts.
+            We quantify interview behavior and train candidates to perform under pressure.
+            Biometric signals are computed with confidence scores — not assumed. Every detection is verified.
           </p>
 
           <div className="flex gap-3 flex-wrap justify-center mt-1">
-            {["rPPG Heart Tracking", "Pressure Escalation", "Cross-Fire Panel Mode", "Stress Endurance Score"].map(f => (
+            {["rPPG Heart Tracking", "Confidence-Scored Detections", "Pressure Escalation", "Multi-Session Progress"].map(f => (
               <span key={f} className="feature-badge rounded-full px-4 py-1.5 text-[10px] font-mono uppercase tracking-[0.15em] text-cyan-400/70">
                 {f}
               </span>

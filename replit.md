@@ -50,7 +50,9 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 - **Collapsible HeartbeatMonitor**: Click header to toggle open/close; smooth slide animation. BPM shown inline when collapsed.
 - **Answer Timer**: Per-question countdown timer (easy=120s, medium=90s, hard=60s). Visual urgency indicators — yellow at 15s, red pulsing at 5s. Auto-advances on timeout with penalty score.
 - **Eye Contact Detection**: Tracks face position relative to camera center. Shows live "ENGAGED"/"AWAY" status with percentage bar. Properly accounts for no-face intervals.
-- **Post-Interview Report**: Comprehensive pressure debrief showing: overall grade (A+ to F), Stress Endurance Score ring, Pressure Timeline with break points, core score bars, composure break point log, answer-by-answer breakdown with AI scores, speech stats (WPM, filler words), eye contact %, pressure escalation/bluff trigger counts, and stern training feedback (no comfort language).
+- **Confidence-Scored Detections**: All biometric events (stress, HR spikes, composure breaks) display computed confidence percentages. Confidence derived from signal quality, stability, and multi-indicator agreement. System messages show "Stress Detected (Confidence: 82%)" format.
+- **Multi-Session Progress Tracking**: localStorage-based session history (last 20 sessions). After 2+ sessions in same domain, report shows progress deltas: eye contact improvement %, stress endurance change, composure break reduction, filler word reduction, overall score trend. Compares against rolling average of last 3 sessions.
+- **Post-Interview Report**: Comprehensive pressure debrief showing: overall grade (A+ to F), Stress Endurance Score ring, Pressure Timeline with break points, session progress tracking (after 2+ sessions), core score bars, composure break point log with confidence scores, stress events with confidence, answer-by-answer breakdown with AI scores, speech stats (WPM, filler words), eye contact %, pressure escalation/bluff trigger counts, and stern training feedback (no comfort language).
 
 ### Key Files
 - `src/hooks/useHeartbeat.ts` — rPPG algorithm (POS, Butterworth, consensus BPM)
