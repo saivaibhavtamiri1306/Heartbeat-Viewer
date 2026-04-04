@@ -5,27 +5,28 @@ import Interview from "./pages/Interview";
 import type { Domain } from "./data/questions";
 import type { InterviewConfig as IConfig } from "./data/questions";
 
-type AppState = "landing" | "config" | "interview";
+type AppState = "landing" | "interview";
 
 function App() {
   const [state, setState] = useState<AppState>("landing");
   const [selectedDomain, setSelectedDomain] = useState<Domain | null>(null);
+  const [showConfigModal, setShowConfigModal] = useState(false);
   const [interviewConfig, setInterviewConfig] = useState<IConfig | null>(null);
 
   const handleSelectDomain = (domain: Domain) => {
     setSelectedDomain(domain);
-    setState("config");
+    setShowConfigModal(true);
   };
 
   const handleStartInterview = (config: IConfig) => {
     setInterviewConfig(config);
+    setShowConfigModal(false);
     setState("interview");
   };
 
-  const handleBack = () => {
-    setState("landing");
+  const handleCloseModal = () => {
+    setShowConfigModal(false);
     setSelectedDomain(null);
-    setInterviewConfig(null);
   };
 
   const handleEnd = () => {
@@ -36,9 +37,17 @@ function App() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {state === "landing" && <Landing onStart={handleSelectDomain} />}
-      {state === "config" && selectedDomain && (
-        <InterviewConfig domain={selectedDomain} onStart={handleStartInterview} onBack={handleBack} />
+      {state === "landing" && (
+        <>
+          <Landing onStart={handleSelectDomain} />
+          {showConfigModal && selectedDomain && (
+            <InterviewConfig
+              domain={selectedDomain}
+              onStart={handleStartInterview}
+              onBack={handleCloseModal}
+            />
+          )}
+        </>
       )}
       {state === "interview" && selectedDomain && interviewConfig && (
         <Interview domain={selectedDomain} config={interviewConfig} onEnd={handleEnd} />
