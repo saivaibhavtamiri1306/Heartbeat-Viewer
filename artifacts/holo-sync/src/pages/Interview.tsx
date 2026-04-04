@@ -497,11 +497,13 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
       })
       .catch(() => {
         setEvaluations(prev => [...prev, {
-          question: currentQ?.text || "", answer: text, score: 5,
-          strengths: "Answer provided", weaknesses: "", suggestion: "",
+          question: currentQ?.text || "", answer: text, score: 3,
+          strengths: "", weaknesses: "Could not evaluate", suggestion: "Try again",
           timeTaken, avatarName: currentQ?.avatarName,
         }]);
       });
+
+    const advanceIndex = currentQuestionIndex + 1;
 
     if (currentQ?.isBullshitTrigger && text.length > 20) {
       setBluffDetected(true);
@@ -530,7 +532,7 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
           if (followUp) {
             setFollowUpCount(c => c + 1);
             activeQuestionRef.current = { ...currentQ!, text: followUp, id: `followup-${Date.now()}` };
-            wasAdaptiveRef.current = true;
+            wasAdaptiveRef.current = false;
             await speakMessage(followUp, avatarName || currentQ?.avatarName, false, currentQ?.avatarIndex ?? 0);
             questionStartRef.current = Date.now();
             setWaitingForAnswer(true);
@@ -539,15 +541,13 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
         }
       } catch {
       }
-      const nextIndex = wasAdaptive ? currentQuestionIndex : currentQuestionIndex + 1;
       wasAdaptiveRef.current = false;
       setFollowUpCount(0);
-      await askNextQuestion(nextIndex);
+      await askNextQuestion(advanceIndex);
     } else {
-      const nextIndex = wasAdaptive ? currentQuestionIndex : currentQuestionIndex + 1;
       wasAdaptiveRef.current = false;
       setFollowUpCount(0);
-      await askNextQuestion(nextIndex);
+      await askNextQuestion(advanceIndex);
     }
   }, [userInput, speech, phase, micOn, questions, currentQuestionIndex, domain.id, config.difficulty,
       followUpCount, addMessage, speakMessage, askNextQuestion, stopListening, clearCurrentAnswer]);
@@ -556,14 +556,13 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
     if (phase !== "active" || !waitingForAnswer) return;
     setWaitingForAnswer(false);
     addMessage({ role: "system", text: "⏰ TIME'S UP — Moving to next question" });
-    const wasAdaptive = wasAdaptiveRef.current;
-    const nextIndex = wasAdaptive ? currentQuestionIndex : currentQuestionIndex + 1;
+    const nextIndex = currentQuestionIndex + 1;
     wasAdaptiveRef.current = false;
     setFollowUpCount(0);
     setEvaluations(prev => [...prev, {
       question: activeQuestionRef.current?.text || "",
       answer: "(Time expired — no answer)",
-      score: 1, strengths: "", weaknesses: "No answer provided within time limit",
+      score: 0, strengths: "", weaknesses: "No answer provided within time limit",
       suggestion: "Practice answering within the allotted time",
       timeTaken: answerTimeLimit, avatarName: activeQuestionRef.current?.avatarName,
     }]);

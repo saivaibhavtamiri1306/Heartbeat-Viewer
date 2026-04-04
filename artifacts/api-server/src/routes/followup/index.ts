@@ -133,12 +133,21 @@ router.post("/evaluate", async (req, res) => {
           role: "system",
           content: `${context}
 
-Evaluate the candidate's answer. Return a JSON object with:
-- "score": number 1-10
-- "strengths": string (1 sentence)
+Evaluate the candidate's answer STRICTLY. Return a JSON object with:
+- "score": number 0-10 (0 = completely wrong/irrelevant/nonsense/gibberish/off-topic, 1 = barely relevant, 5 = mediocre, 7 = good, 10 = exceptional)
+- "strengths": string (1 sentence, or empty string if score is 0-2)
 - "weaknesses": string (1 sentence)
 - "suggestion": string (1 sentence improvement tip)
 
+SCORING RULES:
+- Score 0: Answer is wrong, irrelevant, gibberish, off-topic, or shows zero understanding
+- Score 1-2: Answer is vague, extremely superficial, or mostly incorrect
+- Score 3-4: Answer shows some awareness but is substantially incomplete or has major errors
+- Score 5-6: Answer is mediocre — partially correct but lacks depth or has notable gaps
+- Score 7-8: Answer is good — mostly correct with reasonable depth
+- Score 9-10: Answer is excellent — comprehensive, accurate, well-structured
+
+Be a strict evaluator. Do NOT give participation points. Wrong answers get 0.
 Return ONLY valid JSON, no markdown or explanation.`,
         },
         {
@@ -157,7 +166,7 @@ Return ONLY valid JSON, no markdown or explanation.`,
       const evaluation = JSON.parse(cleaned);
       res.json(evaluation);
     } catch {
-      res.json({ score: 5, strengths: "Answer received", weaknesses: "Could not evaluate", suggestion: "Try to be more specific" });
+      res.json({ score: 3, strengths: "", weaknesses: "Could not parse evaluation", suggestion: "Try to be more specific" });
     }
   } catch (err: any) {
     console.error("Evaluate error:", err?.message || err);

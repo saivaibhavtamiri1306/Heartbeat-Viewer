@@ -98,7 +98,7 @@ function TalkingHeadAvatar({
           lipsyncModules: ["en"],
           lipsyncLang: "en",
           cameraView: "head",
-          cameraDistance: 0.6,
+          cameraDistance: 0.5,
           cameraX: 0,
           cameraY: 0,
           cameraRotateX: 0,
@@ -107,6 +107,8 @@ function TalkingHeadAvatar({
           avatarIdleEyeContact: 0.7,
           mixerGainSpeech: 0.001,
           statsNode: null,
+          pcmSampleRate: 22050,
+          modelPixelRatio: 2,
         });
 
         await head.showAvatar(
@@ -124,7 +126,7 @@ function TalkingHeadAvatar({
           }
         );
 
-        head.setView("head", { cameraDistance: 0.6 });
+        head.setView("head", { cameraDistance: 0.5 });
 
         headRef.current = head;
         setLoading(false);
@@ -294,7 +296,7 @@ export default function Avatar3D({
                 isSpeaking={isSpeaking && active}
                 getAmplitude={active ? getAmplitude : undefined}
                 color={pc[i]}
-                size={active ? 200 : 150}
+                size={active ? 220 : 180}
                 isActive={active}
                 label={labels[i]}
                 emotion={emotion}
