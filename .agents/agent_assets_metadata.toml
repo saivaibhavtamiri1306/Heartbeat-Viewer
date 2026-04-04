@@ -12,6 +12,30 @@ uri = "file://artifacts/holo-sync-deck/public/architecture.png"
 type = "image"
 title = "generated_image"
 
+[[generated]]
+id = "SIcgip2x5RaiQU1Mfpvs0"
+uri = "file://artifacts/holo-sync-deck/public/avatar-detail.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "zAFuV9TXRNG-7-lGJMALw"
+uri = "file://artifacts/holo-sync-deck/public/crossfire-panel.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "245-Cs5VsErVYQc2zW9gu"
+uri = "file://artifacts/holo-sync-deck/public/report-dashboard.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "2knie3Y0EHrmpBR8vfmhG"
+uri = "file://artifacts/holo-sync-deck/public/eye-tracking.png"
+type = "image"
+title = "generated_image"
+
 [[outputs]]
 id = "fngbHVXfnESRQmMoZFimb"
 uri = "file://HOLO_SYNC_DOCUMENTATION.md"

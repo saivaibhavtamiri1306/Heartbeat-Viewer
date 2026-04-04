@@ -4,7 +4,7 @@
     "position": 1,
     "filepath": "src/pages/slides/TitleSlide.tsx",
     "title": "Holo-Sync — Universal Biometric Interviewer",
-    "description": "Title slide introducing the project",
+    "description": "Title slide with hero image, project name, subtitle, and feature badges",
     "speakerNotes": ""
   },
   {
@@ -12,7 +12,7 @@
     "position": 2,
     "filepath": "src/pages/slides/SystemArchitecture.tsx",
     "title": "System Architecture",
-    "description": "Technical architecture overview with component diagram",
+    "description": "Two-layer architecture diagram — biometric layer and interview layer with signal processing pipeline",
     "speakerNotes": ""
   },
   {
@@ -20,47 +20,79 @@
     "position": 3,
     "filepath": "src/pages/slides/RPPGPipeline.tsx",
     "title": "rPPG Heart Rate Pipeline",
-    "description": "Detailed signal processing pipeline for heart rate detection",
+    "description": "6-step signal processing pipeline with numbered stages and technical details",
+    "speakerNotes": ""
+  },
+  {
+    "id": "c4d5e6f7-a8b9-0123-cdef-234567890123",
+    "position": 4,
+    "filepath": "src/pages/slides/Avatar3DSlide.tsx",
+    "title": "3D AI Avatar — LeePerrySmith",
+    "description": "Deep dive into photorealistic avatar rendering with MeshPhysicalMaterial, textures, and emotion system",
     "speakerNotes": ""
   },
   {
     "id": "d4e5f6a7-b8c9-0123-defa-234567890123",
-    "position": 4,
+    "position": 5,
     "filepath": "src/pages/slides/InterviewDomains.tsx",
     "title": "Interview Domains",
-    "description": "Five specialized interview tracks with features",
+    "description": "Five specialized interview tracks with sub-topics and difficulty-adaptive time limits",
+    "speakerNotes": ""
+  },
+  {
+    "id": "d5e6f7a8-b9c0-1234-defa-345678901234",
+    "position": 6,
+    "filepath": "src/pages/slides/CrossFirePanel.tsx",
+    "title": "Cross-Fire Panel Mode",
+    "description": "Three AI panelist personas with distinct personalities, voices, and questioning styles",
+    "speakerNotes": ""
+  },
+  {
+    "id": "d6e7f8a9-b0c1-2345-defa-456789012345",
+    "position": 7,
+    "filepath": "src/pages/slides/BluffDetectorSlide.tsx",
+    "title": "Bluff Detector + Eye Contact",
+    "description": "Split slide covering factual verification, vagueness detection, and gaze tracking systems",
     "speakerNotes": ""
   },
   {
     "id": "e5f6a7b8-c9d0-1234-efab-345678901234",
-    "position": 5,
+    "position": 8,
     "filepath": "src/pages/slides/KeyFeatures.tsx",
-    "title": "Key Features",
-    "description": "Unique features including bluff detector and cross-fire panel",
+    "title": "Intelligent Features",
+    "description": "Stress-adaptive avatar, AI follow-ups, answer timer, and multi-voice TTS",
     "speakerNotes": ""
   },
   {
     "id": "f6a7b8c9-d0e1-2345-fabc-456789012345",
-    "position": 6,
+    "position": 9,
     "filepath": "src/pages/slides/DataFlow.tsx",
-    "title": "Interview Data Flow",
-    "description": "Real-time processing flow from webcam to post-interview report",
+    "title": "Interview Session Flow",
+    "description": "Three-layer flow diagram — biometric, interview, and output pipelines",
+    "speakerNotes": ""
+  },
+  {
+    "id": "f7a8b9c0-d1e2-3456-fabc-567890123456",
+    "position": 10,
+    "filepath": "src/pages/slides/PostReport.tsx",
+    "title": "Post-Interview Report",
+    "description": "Content metrics and biometric metrics in the generated performance report",
     "speakerNotes": ""
   },
   {
     "id": "a7b8c9d0-e1f2-3456-abcd-567890123456",
-    "position": 7,
+    "position": 11,
     "filepath": "src/pages/slides/TechStack.tsx",
     "title": "Technology Stack",
-    "description": "Frontend, CV, and AI technologies used",
+    "description": "Frontend, Computer Vision, and AI/Backend technology details with key specs",
     "speakerNotes": ""
   },
   {
     "id": "b8c9d0e1-f2a3-4567-bcde-678901234567",
-    "position": 8,
+    "position": 12,
     "filepath": "src/pages/slides/ClosingSlide.tsx",
     "title": "Closing — HOLO-SYNC",
-    "description": "Closing slide with key metrics",
+    "description": "Final slide with 5 key metrics and technology footer",
     "speakerNotes": ""
   }
 ]
