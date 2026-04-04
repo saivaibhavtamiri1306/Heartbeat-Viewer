@@ -42,7 +42,8 @@ export interface HeartbeatData {
 }
 
 const BUFFER_SIZE = 360;
-const MIN_FRAMES = 90;
+const MIN_FRAMES_FAST = 64;
+const MIN_FRAMES_FULL = 90;
 const BPM_LO = 45;
 const BPM_HI = 180;
 const FL = BPM_LO / 60;
@@ -335,32 +336,50 @@ function computePOS(rSig: number[], gSig: number[], bSig: number[], fps: number)
 
 function computeCHROM(rSig: number[], gSig: number[], bSig: number[], fps: number): AnalysisResult {
   const N = rSig.length;
-  const rMean = mean(rSig) || 1;
-  const gMean = mean(gSig) || 1;
-  const bMean = mean(bSig) || 1;
+  const winSize = Math.min(N, Math.round(fps * 1.6));
+  const step = Math.max(1, Math.round(winSize / 2));
+  const chromSig = new Float64Array(N);
+  const counts = new Float64Array(N);
 
-  const rNorm = rSig.map(v => v / rMean);
-  const gNorm = gSig.map(v => v / gMean);
-  const bNorm = bSig.map(v => v / bMean);
+  for (let start = 0; start <= N - winSize; start += step) {
+    let rM = 0, gM = 0, bM = 0;
+    for (let i = start; i < start + winSize; i++) { rM += rSig[i]; gM += gSig[i]; bM += bSig[i]; }
+    rM /= winSize; gM /= winSize; bM /= winSize;
+    if (rM < 1 || gM < 1 || bM < 1) continue;
 
-  const xs = new Array(N);
-  const ys = new Array(N);
-  for (let i = 0; i < N; i++) {
-    xs[i] = 3 * rNorm[i] - 2 * gNorm[i];
-    ys[i] = 1.5 * rNorm[i] + gNorm[i] - 1.5 * bNorm[i];
+    const xs = new Float64Array(winSize);
+    const ys = new Float64Array(winSize);
+    for (let i = 0; i < winSize; i++) {
+      const rn = rSig[start + i] / rM;
+      const gn = gSig[start + i] / gM;
+      const bn = bSig[start + i] / bM;
+      xs[i] = 3 * rn - 2 * gn;
+      ys[i] = 1.5 * rn + gn - 1.5 * bn;
+    }
+
+    const xf = butterworthBandpass(Array.from(xs), fps, FL, FH);
+    const yf = butterworthBandpass(Array.from(ys), fps, FL, FH);
+
+    let xSq = 0, ySq = 0;
+    for (let i = 0; i < winSize; i++) { xSq += xf[i] * xf[i]; ySq += yf[i] * yf[i]; }
+    const xStd = Math.sqrt(xSq / winSize);
+    const yStd = Math.sqrt(ySq / winSize);
+    const alpha = yStd > 1e-10 ? xStd / yStd : 0;
+
+    let wMean = 0;
+    for (let i = 0; i < winSize; i++) wMean += xf[i] - alpha * yf[i];
+    wMean /= winSize;
+
+    for (let i = 0; i < winSize; i++) {
+      chromSig[start + i] += (xf[i] - alpha * yf[i]) - wMean;
+      counts[start + i] += 1;
+    }
   }
 
-  const xFiltered = butterworthBandpass(xs, fps, FL, FH);
-  const yFiltered = butterworthBandpass(ys, fps, FL, FH);
+  const chromOut = new Array(N);
+  for (let i = 0; i < N; i++) chromOut[i] = counts[i] > 0 ? chromSig[i] / counts[i] : 0;
 
-  const xStd = std(xFiltered) || 1;
-  const yStd = std(yFiltered) || 1;
-  const alpha = xStd / yStd;
-
-  const chromSig = new Array(N);
-  for (let i = 0; i < N; i++) chromSig[i] = xFiltered[i] - alpha * yFiltered[i];
-
-  return analyzeSignal(chromSig, fps, true, "CHROM");
+  return analyzeSignal(chromOut, fps, true, "CHROM");
 }
 
 function computeGreen(gSig: number[], fps: number): AnalysisResult {
@@ -373,17 +392,47 @@ function bestOfThree(
   const pos = computePOS(rSig, gSig, bSig, fps);
   const chrom = computeCHROM(rSig, gSig, bSig, fps);
   const green = computeGreen(gSig, fps);
+  const all = [pos, chrom, green];
 
-  const candidates = [pos, chrom, green].sort((a, b) => b.snr - a.snr);
+  const pcAgree = Math.abs(pos.bpm - chrom.bpm) <= 5;
+  const pgAgree = Math.abs(pos.bpm - green.bpm) <= 5;
+  const cgAgree = Math.abs(chrom.bpm - green.bpm) <= 5;
 
-  const best = candidates[0];
-  const second = candidates[1];
-
-  if (Math.abs(best.bpm - second.bpm) <= 5) {
-    best.confidence = Math.min(98, best.confidence + 8);
+  if (pcAgree && pgAgree) {
+    const wBpm = Math.round(
+      (pos.bpm * pos.snr + chrom.bpm * chrom.snr + green.bpm * green.snr) /
+      (pos.snr + chrom.snr + green.snr)
+    );
+    const best = all.sort((a, b) => b.snr - a.snr)[0];
+    best.bpm = wBpm;
+    best.confidence = Math.min(98, best.confidence + 15);
+    best.method = "POS+CHROM+G";
+    return best;
   }
 
-  return best;
+  if (pcAgree) {
+    const winner = pos.snr >= chrom.snr ? pos : chrom;
+    winner.bpm = Math.round((pos.bpm * pos.snr + chrom.bpm * chrom.snr) / (pos.snr + chrom.snr));
+    winner.confidence = Math.min(98, winner.confidence + 10);
+    winner.method = "POS+CHROM";
+    return winner;
+  }
+  if (pgAgree) {
+    const winner = pos.snr >= green.snr ? pos : green;
+    winner.bpm = Math.round((pos.bpm * pos.snr + green.bpm * green.snr) / (pos.snr + green.snr));
+    winner.confidence = Math.min(98, winner.confidence + 8);
+    winner.method = "POS+G";
+    return winner;
+  }
+  if (cgAgree) {
+    const winner = chrom.snr >= green.snr ? chrom : green;
+    winner.bpm = Math.round((chrom.bpm * chrom.snr + green.bpm * green.snr) / (chrom.snr + green.snr));
+    winner.confidence = Math.min(98, winner.confidence + 8);
+    winner.method = "CHROM+G";
+    return winner;
+  }
+
+  return all.sort((a, b) => b.snr - a.snr)[0];
 }
 
 function autocorrelationBPM(sig: number[], fps: number): number | null {
@@ -425,12 +474,11 @@ function sampleRGBSkinFiltered(
   faceBox: FaceBox | null,
   vw: number, vh: number,
 ): { r: number; g: number; b: number; brightness: number; ok: boolean; label: string; skinRatio: number; motion: number } {
-  let totalR = 0, totalG = 0, totalB = 0, cnt = 0, skinCnt = 0, allCnt = 0;
+  let totalR = 0, totalG = 0, totalB = 0, totalW = 0, skinCnt = 0, allCnt = 0;
   let label = "";
-  let varR = 0, varG = 0, varB = 0;
   const pixR: number[] = [], pixG: number[] = [], pixB: number[] = [];
 
-  const addBox = (x: number, y: number, w: number, h: number, lbl: string, step = 2) => {
+  const addBox = (x: number, y: number, w: number, h: number, lbl: string, weight: number, step = 2) => {
     const xi = Math.max(0, Math.floor(x));
     const yi = Math.max(0, Math.floor(y));
     const wi = Math.max(1, Math.min(Math.floor(w), vw - xi));
@@ -444,9 +492,9 @@ function sampleRGBSkinFiltered(
           const r = d[idx], g = d[idx + 1], b = d[idx + 2];
           allCnt++;
           if (isSkinPixel(r, g, b)) {
-            totalR += r; totalG += g; totalB += b;
+            totalR += r * weight; totalG += g * weight; totalB += b * weight;
+            totalW += weight;
             pixR.push(r); pixG.push(g); pixB.push(b);
-            cnt++;
             skinCnt++;
           }
         }
@@ -456,36 +504,34 @@ function sampleRGBSkinFiltered(
   };
 
   if (foreheadBox && foreheadBox.w > 8 && foreheadBox.h > 6)
-    addBox(foreheadBox.x, foreheadBox.y, foreheadBox.w, foreheadBox.h, "FH", 2);
+    addBox(foreheadBox.x, foreheadBox.y, foreheadBox.w, foreheadBox.h, "FH", 3.0, 2);
   if (cheekBox && cheekBox.w > 10 && cheekBox.h > 8)
-    addBox(cheekBox.x, cheekBox.y, cheekBox.w, cheekBox.h, "CK", 2);
+    addBox(cheekBox.x, cheekBox.y, cheekBox.w, cheekBox.h, "CK", 2.0, 2);
 
   if (faceBox && faceBox.w > 30 && faceBox.h > 30) {
     const fx = faceBox.x, fy = faceBox.y, fw = faceBox.w, fh = faceBox.h;
-    addBox(fx + fw * 0.38, fy + fh * 0.55, fw * 0.24, fh * 0.12, "NS", 2);
-    addBox(fx + fw * 0.30, fy + fh * 0.78, fw * 0.40, fh * 0.10, "CN", 2);
-    addBox(fx + fw * 0.02, fy + fh * 0.15, fw * 0.18, fh * 0.18, "LT", 3);
-    addBox(fx + fw * 0.80, fy + fh * 0.15, fw * 0.18, fh * 0.18, "RT", 3);
-    if (cnt < 30) {
-      addBox(fx + fw * 0.25, fy + fh * 0.05, fw * 0.50, fh * 0.20, "FC", 2);
+    addBox(fx + fw * 0.38, fy + fh * 0.55, fw * 0.24, fh * 0.12, "NS", 1.5, 2);
+    addBox(fx + fw * 0.30, fy + fh * 0.78, fw * 0.40, fh * 0.10, "CN", 1.0, 2);
+    addBox(fx + fw * 0.02, fy + fh * 0.15, fw * 0.18, fh * 0.18, "LT", 1.0, 3);
+    addBox(fx + fw * 0.80, fy + fh * 0.15, fw * 0.18, fh * 0.18, "RT", 1.0, 3);
+    if (skinCnt < 30) {
+      addBox(fx + fw * 0.25, fy + fh * 0.05, fw * 0.50, fh * 0.20, "FC", 2.5, 2);
     }
   }
 
-  if (cnt < 5) return { r: 0, g: 0, b: 0, brightness: 0, ok: false, label: "NONE", skinRatio: 0, motion: 0 };
+  if (totalW < 1) return { r: 0, g: 0, b: 0, brightness: 0, ok: false, label: "NONE", skinRatio: 0, motion: 0 };
 
-  const r = totalR / cnt, g = totalG / cnt, b = totalB / cnt;
+  const r = totalR / totalW, g = totalG / totalW, b = totalB / totalW;
   const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
   const skinRatio = allCnt > 0 ? skinCnt / allCnt : 0;
-  const ok = brightness > 30 && brightness < 240 && skinRatio > 0.15;
+  const ok = brightness > 30 && brightness < 240 && skinRatio > 0.12;
 
+  let varSum = 0;
   if (pixR.length > 1) {
-    varR = std(pixR);
-    varG = std(pixG);
-    varB = std(pixB);
+    varSum = (std(pixR) + std(pixG) + std(pixB)) / 3;
   }
-  const motion = (varR + varG + varB) / 3;
 
-  return { r, g, b, brightness, ok, label, skinRatio, motion };
+  return { r, g, b, brightness, ok, label, skinRatio, motion: varSum };
 }
 
 function iqrFilter(vals: number[]): number[] {
@@ -610,7 +656,8 @@ export function useHeartbeat(
 
     const bufLen = rBuf.current.length;
 
-    if (frameRef.current % 3 === 0 && bufLen >= MIN_FRAMES) {
+    const minRequired = bpmRef.current === null ? MIN_FRAMES_FAST : MIN_FRAMES_FULL;
+    if (frameRef.current % 3 === 0 && bufLen >= minRequired) {
       const elapsed = (tsBuf.current[bufLen - 1] - tsBuf.current[0]) / 1000;
       if (elapsed < 0.5) { rafRef.current = requestAnimationFrame(processFrame); return; }
       const actualFps = (bufLen - 1) / elapsed;
@@ -679,7 +726,7 @@ export function useHeartbeat(
         roiDebug: `${roi.label} SK:${Math.round(roi.skinRatio * 100)}%`,
       }));
     } else if (frameRef.current % 20 === 0) {
-      const rem = Math.max(0, MIN_FRAMES - bufLen);
+      const rem = Math.max(0, minRequired - bufLen);
       setData(prev => ({
         ...prev, isActive: true, faceDetected: true,
         frameRate: Math.round(fpsRef.current),
