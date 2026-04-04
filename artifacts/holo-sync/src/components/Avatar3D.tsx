@@ -1,6 +1,6 @@
 import { useRef, useMemo, Suspense } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { Float, Stars, useGLTF } from "@react-three/drei";
+import { Float, Stars, useGLTF, Environment, useTexture } from "@react-three/drei";
 import * as THREE from "three";
 
 interface AvatarProps {
@@ -94,40 +94,42 @@ function RealHeadAvatar({ emotion, isSpeaking, bpm, index = 0, name, isActive = 
   const eyeRightRef = useRef<THREE.Mesh>(null);
   const mouthGlowRef = useRef<THREE.Mesh>(null);
   const { scene } = useGLTF(HEAD_MODEL_URL);
+  const [colorMap, normalMap] = useTexture(["/head-color.jpg", "/head-normal.jpg"]);
   const colors = EMOTION_COLORS[emotion];
   const offset = index * (Math.PI * 2 / 3);
   const mouthVal = useRef(0);
 
   const model = useMemo(() => {
+    colorMap.colorSpace = THREE.SRGBColorSpace;
+    colorMap.flipY = false;
+    normalMap.flipY = false;
+
     const clone = scene.clone(true);
     clone.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh;
-        if (mesh.material) {
-          const mat = new THREE.MeshStandardMaterial({
-            color: new THREE.Color(0xd4a574),
-            roughness: 0.55,
-            metalness: 0.02,
-            emissive: new THREE.Color(colors.emissive),
-            emissiveIntensity: 0.08,
-          });
-
-          if ((mesh.material as THREE.MeshStandardMaterial).map) {
-            mat.map = (mesh.material as THREE.MeshStandardMaterial).map;
-            mat.roughness = 0.5;
-          }
-          if ((mesh.material as THREE.MeshStandardMaterial).normalMap) {
-            mat.normalMap = (mesh.material as THREE.MeshStandardMaterial).normalMap;
-          }
-
-          mesh.material = mat;
-          mesh.castShadow = true;
-          mesh.receiveShadow = true;
-        }
+        const mat = new THREE.MeshPhysicalMaterial({
+          map: colorMap,
+          normalMap: normalMap,
+          normalScale: new THREE.Vector2(1.2, 1.2),
+          roughness: 0.55,
+          metalness: 0.0,
+          clearcoat: 0.05,
+          clearcoatRoughness: 0.6,
+          sheen: 0.3,
+          sheenRoughness: 0.5,
+          sheenColor: new THREE.Color(0xffccaa),
+          envMapIntensity: 0.5,
+          emissive: new THREE.Color(colors.emissive),
+          emissiveIntensity: 0.03,
+        });
+        mesh.material = mat;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
       }
     });
     return clone;
-  }, [scene, colors.emissive]);
+  }, [scene, colorMap, normalMap, colors.emissive]);
 
   useFrame((state) => {
     const t = state.clock.elapsedTime;
@@ -321,19 +323,35 @@ export default function Avatar3D({
     <div className="w-full h-full relative" style={{ background: "radial-gradient(ellipse at center, #0a1628 0%, #000408 70%)" }}>
       <Canvas
         camera={{ position: [0, 0.2, 3.2], fov: 35 }}
-        dpr={[1, 1.5]}
-        gl={{ antialias: true, alpha: true }}
+        dpr={[1, 2]}
+        gl={{
+          antialias: true,
+          alpha: true,
+          toneMapping: THREE.ACESFilmicToneMapping,
+          toneMappingExposure: 1.1,
+        }}
         shadows
       >
         <color attach="background" args={["#000408"]} />
-        <fog attach="fog" args={["#000408", 5, 12]} />
+        <fog attach="fog" args={["#000408", 6, 14]} />
 
-        <ambientLight intensity={0.4} />
-        <directionalLight position={[2, 3, 4]} intensity={1.5} color={0xfff0e0} castShadow />
-        <directionalLight position={[-3, 1, -2]} intensity={0.3} color={EMOTION_COLORS[emotion].primary} />
-        <pointLight position={[0, 2, 3]} intensity={0.7} color={0xfff5e6} />
-        <pointLight position={[0, -1, 2]} intensity={0.2} color={EMOTION_COLORS[emotion].primary} />
-        <pointLight position={[-2, 0.5, 1]} intensity={0.15} color={0x88aaff} />
+        <Environment preset="studio" environmentIntensity={0.3} />
+
+        <ambientLight intensity={0.25} color={0xffe8d0} />
+        <directionalLight
+          position={[1.5, 2.5, 3]}
+          intensity={2.5}
+          color={0xfff0e0}
+          castShadow
+          shadow-mapSize-width={1024}
+          shadow-mapSize-height={1024}
+          shadow-bias={-0.0001}
+        />
+        <directionalLight position={[-2.5, 1.5, 1]} intensity={0.6} color={0xc0d8ff} />
+        <directionalLight position={[0.5, -0.5, 3]} intensity={0.4} color={0xffd4b0} />
+        <spotLight position={[0, 3, 2]} intensity={0.8} angle={0.4} penumbra={0.5} color={0xfff5e6} />
+        <pointLight position={[0, 0, 3.5]} intensity={0.3} color={EMOTION_COLORS[emotion].primary} />
+        <pointLight position={[-1.5, 0.5, 1.5]} intensity={0.12} color={0x88aaff} />
 
         <Stars radius={8} depth={25} count={600} factor={1.5} saturation={0.1} fade speed={0.3} />
         <AmbientParticles color={EMOTION_COLORS[emotion].primary} count={400} />
