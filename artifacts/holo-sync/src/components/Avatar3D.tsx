@@ -21,87 +21,71 @@ const EMOTION_COLORS = {
   stressed:   { primary: 0xff00ff, secondary: 0xcc00cc, emissive: 0x220022, label: "#ff00ff" },
 };
 
-function createHumanHeadGeometry(): THREE.BufferGeometry {
-  const geo = new THREE.SphereGeometry(1, 32, 24);
+function createHeadGeometry(): THREE.BufferGeometry {
+  const geo = new THREE.SphereGeometry(1, 64, 48);
   const pos = geo.attributes.position;
   const v = new THREE.Vector3();
 
   for (let i = 0; i < pos.count; i++) {
     v.fromBufferAttribute(pos, i);
+    const ox = v.x, oy = v.y, oz = v.z;
 
-    const nx = v.x, ny = v.y, nz = v.z;
+    v.x *= 0.76;
+    v.z *= 0.86;
 
-    v.x *= 0.82;
-    v.z *= 0.9;
-
-    if (ny > 0.3) {
-      v.y *= 1.08;
-      v.x *= 1.0 + (ny - 0.3) * 0.15;
+    if (oy > 0.15) {
+      v.y *= 1.05;
+      v.x *= 1.0 + (oy - 0.15) * 0.1;
     }
 
-    if (ny < -0.2) {
-      const chinFactor = Math.max(0, (-ny - 0.2) * 1.5);
-      v.x *= 1.0 - chinFactor * 0.4;
-      v.z *= 1.0 - chinFactor * 0.2;
-      v.y *= 1.0 + chinFactor * 0.1;
+    if (oy > 0.5) {
+      v.y *= 1.0 + (oy - 0.5) * 0.08;
     }
 
-    if (nz > 0.3 && Math.abs(ny - 0.15) < 0.35) {
-      const cheekFactor = Math.abs(nx) * 0.8;
-      v.z += 0.08 * (1.0 - cheekFactor);
+    if (oy < -0.1) {
+      const cf = Math.max(0, (-oy - 0.1) * 1.2);
+      v.x *= 1.0 - cf * 0.42;
+      v.z *= 1.0 - cf * 0.22;
+      v.y *= 1.0 + cf * 0.1;
     }
 
-    if (nz > 0.5 && Math.abs(nx) < 0.3 && ny > -0.1 && ny < 0.4) {
-      const noseDist = 1.0 - Math.abs(nx) / 0.3;
-      const noseY = 1.0 - Math.abs(ny - 0.1) / 0.3;
-      v.z += 0.15 * noseDist * noseY;
+    if (oz > 0.25 && Math.abs(oy - 0.1) < 0.45) {
+      const ck = Math.max(0, 1.0 - Math.abs(ox) * 0.9);
+      v.z += 0.09 * ck;
     }
 
-    const eyeY = 0.25;
-    const eyeSpacing = 0.35;
+    if (oz > 0.35 && Math.abs(ox) < 0.22 && oy > -0.15 && oy < 0.3) {
+      const nd = 1.0 - Math.abs(ox) / 0.22;
+      const ny2 = 1.0 - Math.abs(oy - 0.03) / 0.3;
+      v.z += 0.16 * nd * Math.max(0, ny2);
+    }
+
+    if (oz > 0.4 && Math.abs(ox) < 0.1 && oy < 0.0 && oy > -0.12) {
+      v.z += 0.08;
+    }
+
     for (const side of [-1, 1]) {
-      const eyeX = side * eyeSpacing;
-      const dx = nx - eyeX;
-      const dy = ny - eyeY;
-      const eyeDist = Math.sqrt(dx * dx + dy * dy);
-      if (eyeDist < 0.2 && nz > 0.4) {
-        v.z -= 0.06 * (1.0 - eyeDist / 0.2);
+      const ex = side * 0.3;
+      const ey = 0.2;
+      const dx = ox - ex;
+      const dy = oy - ey;
+      const ed = Math.sqrt(dx * dx + dy * dy);
+      if (ed < 0.16 && oz > 0.3) {
+        v.z -= 0.06 * (1.0 - ed / 0.16);
       }
     }
 
-    if (ny > 0.35 && nz > 0.3) {
-      v.z += 0.05 * (ny - 0.35);
+    if (oy > 0.3 && oz > 0.2) {
+      v.z += 0.05 * (oy - 0.3);
     }
 
-    const earY = 0.1;
-    if (Math.abs(nx) > 0.7 && Math.abs(ny - earY) < 0.25 && nz < 0.3) {
-      const earFactor = (Math.abs(nx) - 0.7) * 3.0;
-      v.x += Math.sign(nx) * earFactor * 0.08;
-      v.z -= earFactor * 0.03;
+    if (Math.abs(ox) > 0.7 && Math.abs(oy - 0.06) < 0.2 && oz < 0.2) {
+      const ef = (Math.abs(ox) - 0.7) * 2.5;
+      v.x += Math.sign(ox) * ef * 0.1;
     }
 
-    pos.setXYZ(i, v.x, v.y, v.z);
-  }
-
-  geo.computeVertexNormals();
-  return geo;
-}
-
-function createBustGeometry(): THREE.BufferGeometry {
-  const geo = new THREE.CylinderGeometry(0.35, 0.9, 1.2, 24, 8, true);
-  const pos = geo.attributes.position;
-  const v = new THREE.Vector3();
-
-  for (let i = 0; i < pos.count; i++) {
-    v.fromBufferAttribute(pos, i);
-
-    const t = (v.y + 0.6) / 1.2;
-    v.x *= 0.7 + t * 0.5;
-    v.z *= 0.5 + t * 0.3;
-
-    if (t < 0.3) {
-      const shoulderT = t / 0.3;
-      v.x *= 1.0 + (1.0 - shoulderT) * 0.6;
+    if (oz > 0.2 && oy < -0.22 && oy > -0.5 && Math.abs(ox) < 0.2) {
+      v.z += 0.04;
     }
 
     pos.setXYZ(i, v.x, v.y, v.z);
@@ -111,34 +95,31 @@ function createBustGeometry(): THREE.BufferGeometry {
   return geo;
 }
 
-function HologramParticles({ color, count = 2000 }: { color: number; count?: number }) {
-  const pointsRef = useRef<THREE.Points>(null);
-
-  const { positions, opacities } = useMemo(() => {
-    const positions = new Float32Array(count * 3);
-    const opacities = new Float32Array(count);
+function AmbientParticles({ color, count = 600 }: { color: number; count?: number }) {
+  const ref = useRef<THREE.Points>(null);
+  const positions = useMemo(() => {
+    const arr = new Float32Array(count * 3);
     for (let i = 0; i < count; i++) {
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(2 * Math.random() - 1);
-      const r = 0.85 + Math.random() * 0.5;
-      positions[i * 3] = r * Math.sin(phi) * Math.cos(theta) * 0.82;
-      positions[i * 3 + 1] = r * Math.cos(phi) * 1.1 + (Math.random() - 0.5) * 0.4;
-      positions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta) * 0.9;
-      opacities[i] = Math.random();
+      const r = 2.0 + Math.random() * 3;
+      arr[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+      arr[i * 3 + 1] = r * Math.cos(phi) + (Math.random() - 0.5) * 2;
+      arr[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
     }
-    return { positions, opacities };
+    return arr;
   }, [count]);
 
-  useFrame((state) => {
-    if (!pointsRef.current) return;
-    const t = state.clock.elapsedTime;
-    pointsRef.current.rotation.y = t * 0.05;
-    const mat = pointsRef.current.material as THREE.PointsMaterial;
-    mat.opacity = 0.4 + Math.sin(t * 1.5) * 0.15;
+  useFrame((s) => {
+    if (ref.current) {
+      ref.current.rotation.y = s.clock.elapsedTime * 0.015;
+      (ref.current.material as THREE.PointsMaterial).opacity =
+        0.2 + Math.sin(s.clock.elapsedTime * 0.8) * 0.08;
+    }
   });
 
   return (
-    <points ref={pointsRef}>
+    <points ref={ref}>
       <bufferGeometry>
         <bufferAttribute attach="attributes-position" args={[positions, 3]} />
       </bufferGeometry>
@@ -146,7 +127,7 @@ function HologramParticles({ color, count = 2000 }: { color: number; count?: num
         size={0.012}
         color={color}
         transparent
-        opacity={0.5}
+        opacity={0.25}
         sizeAttenuation
         depthWrite={false}
         blending={THREE.AdditiveBlending}
@@ -155,340 +136,372 @@ function HologramParticles({ color, count = 2000 }: { color: number; count?: num
   );
 }
 
-function ScanLine({ color }: { color: number }) {
-  const lineRef = useRef<THREE.Mesh>(null);
+function SubtleRings({ color }: { color: number }) {
+  const r1 = useRef<THREE.Mesh>(null);
+  const r2 = useRef<THREE.Mesh>(null);
 
-  useFrame((state) => {
-    if (!lineRef.current) return;
-    const t = state.clock.elapsedTime;
-    lineRef.current.position.y = Math.sin(t * 0.6) * 1.5;
-    const mat = lineRef.current.material as THREE.MeshBasicMaterial;
-    mat.opacity = 0.15 + Math.abs(Math.sin(t * 0.6)) * 0.1;
-  });
-
-  return (
-    <mesh ref={lineRef} rotation={[Math.PI / 2, 0, 0]}>
-      <ringGeometry args={[0, 1.5, 64, 1]} />
-      <meshBasicMaterial
-        color={color}
-        transparent
-        opacity={0.15}
-        side={THREE.DoubleSide}
-        depthWrite={false}
-        blending={THREE.AdditiveBlending}
-      />
-    </mesh>
-  );
-}
-
-function HologramRings({ color, isSpeaking }: { color: number; isSpeaking: boolean }) {
-  const ring1Ref = useRef<THREE.Mesh>(null);
-  const ring2Ref = useRef<THREE.Mesh>(null);
-  const ring3Ref = useRef<THREE.Mesh>(null);
-
-  useFrame((state) => {
-    const t = state.clock.elapsedTime;
-    const speakMul = isSpeaking ? 1.3 : 1.0;
-
-    if (ring1Ref.current) {
-      ring1Ref.current.rotation.z = t * 0.3;
-      ring1Ref.current.scale.setScalar(1.0 + Math.sin(t * 2) * 0.05 * speakMul);
+  useFrame((s) => {
+    const t = s.clock.elapsedTime;
+    if (r1.current) {
+      r1.current.rotation.z = t * 0.12;
+      r1.current.scale.setScalar(1.0 + Math.sin(t * 1.2) * 0.02);
     }
-    if (ring2Ref.current) {
-      ring2Ref.current.rotation.z = -t * 0.2;
-      ring2Ref.current.scale.setScalar(1.0 + Math.sin(t * 2.5 + 1) * 0.04 * speakMul);
-    }
-    if (ring3Ref.current) {
-      ring3Ref.current.rotation.z = t * 0.15;
-      ring3Ref.current.scale.setScalar(1.0 + Math.sin(t * 3 + 2) * 0.03 * speakMul);
+    if (r2.current) {
+      r2.current.rotation.z = -t * 0.08;
     }
   });
 
   return (
-    <group position={[0, -0.5, 0]}>
-      <mesh ref={ring1Ref} rotation={[Math.PI / 2, 0, 0]}>
-        <torusGeometry args={[1.2, 0.008, 4, 80]} />
-        <meshBasicMaterial color={color} transparent opacity={0.3} blending={THREE.AdditiveBlending} />
+    <group position={[0, -1.5, 0]}>
+      <mesh ref={r1} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[1.0, 0.005, 4, 64]} />
+        <meshBasicMaterial color={color} transparent opacity={0.12} blending={THREE.AdditiveBlending} />
       </mesh>
-      <mesh ref={ring2Ref} rotation={[Math.PI / 2.2, 0.2, 0]}>
-        <torusGeometry args={[1.35, 0.006, 4, 80]} />
-        <meshBasicMaterial color={color} transparent opacity={0.2} blending={THREE.AdditiveBlending} />
-      </mesh>
-      <mesh ref={ring3Ref} rotation={[Math.PI / 1.9, -0.15, 0]}>
-        <torusGeometry args={[1.5, 0.005, 4, 80]} />
-        <meshBasicMaterial color={color} transparent opacity={0.15} blending={THREE.AdditiveBlending} />
+      <mesh ref={r2} rotation={[Math.PI / 2.05, 0.08, 0]}>
+        <torusGeometry args={[1.15, 0.004, 4, 64]} />
+        <meshBasicMaterial color={color} transparent opacity={0.08} blending={THREE.AdditiveBlending} />
       </mesh>
     </group>
   );
 }
 
-function BaseGlow({ color }: { color: number }) {
-  const glowRef = useRef<THREE.Mesh>(null);
-
-  useFrame((state) => {
-    if (!glowRef.current) return;
-    const t = state.clock.elapsedTime;
-    const mat = glowRef.current.material as THREE.MeshBasicMaterial;
-    mat.opacity = 0.08 + Math.sin(t * 1.5) * 0.03;
-  });
-
-  return (
-    <group position={[0, -2.0, 0]}>
-      <mesh ref={glowRef} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[1.8, 48]} />
-        <meshBasicMaterial
-          color={color}
-          transparent
-          opacity={0.08}
-          side={THREE.DoubleSide}
-          depthWrite={false}
-          blending={THREE.AdditiveBlending}
-        />
-      </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
-        <ringGeometry args={[0.9, 1.0, 48]} />
-        <meshBasicMaterial
-          color={color}
-          transparent
-          opacity={0.25}
-          side={THREE.DoubleSide}
-          depthWrite={false}
-          blending={THREE.AdditiveBlending}
-        />
-      </mesh>
-    </group>
-  );
-}
-
-function VerticalBeams({ color }: { color: number }) {
+function HumanAvatar({ emotion, isSpeaking, bpm, index = 0, name, isActive = true, mouthOpenness = 0 }: AvatarProps) {
   const groupRef = useRef<THREE.Group>(null);
-  const beamCount = 24;
+  const mouthRef = useRef<THREE.Mesh>(null);
+  const lowerLipRef = useRef<THREE.Mesh>(null);
+  const jawRef = useRef<THREE.Mesh>(null);
+  const leftEyeGrpRef = useRef<THREE.Group>(null);
+  const rightEyeGrpRef = useRef<THREE.Group>(null);
+  const leftIrisRef = useRef<THREE.Mesh>(null);
+  const rightIrisRef = useRef<THREE.Mesh>(null);
+  const leftBrowRef = useRef<THREE.Mesh>(null);
+  const rightBrowRef = useRef<THREE.Mesh>(null);
 
-  const positions = useMemo(() => {
-    const arr: [number, number][] = [];
-    for (let i = 0; i < beamCount; i++) {
-      const angle = (i / beamCount) * Math.PI * 2;
-      const r = 0.95 + Math.random() * 0.3;
-      arr.push([Math.cos(angle) * r, Math.sin(angle) * r]);
-    }
-    return arr;
-  }, []);
+  const colors = EMOTION_COLORS[emotion];
+  const offset = index * (Math.PI * 2 / 3);
+  const mouthVal = useRef(0);
+
+  const headGeo = useMemo(() => createHeadGeometry(), []);
+
+  const skinBase = useMemo(() => new THREE.Color(0xd4a574), []);
+  const skinDark = useMemo(() => new THREE.Color(0xb88f65), []);
+  const lipCol = useMemo(() => new THREE.Color(0xc46858), []);
+  const hairCol = useMemo(() => new THREE.Color(0x1a1209), []);
+  const browCol = useMemo(() => new THREE.Color(0x1a1209), []);
 
   useFrame((state) => {
+    const t = state.clock.elapsedTime;
     if (!groupRef.current) return;
-    groupRef.current.rotation.y = state.clock.elapsedTime * 0.03;
+
+    groupRef.current.rotation.y = Math.sin(t * 0.25 + offset) * (isActive ? 0.12 : 0.04);
+    groupRef.current.rotation.x = Math.sin(t * 0.18 + offset) * 0.03;
+    const cs = groupRef.current.scale.x;
+    const ts = isActive ? 1.0 : 0.88;
+    groupRef.current.scale.setScalar(THREE.MathUtils.lerp(cs, ts, 0.04));
+
+    const tm = isSpeaking ? (mouthOpenness ?? (0.25 + Math.abs(Math.sin(t * 8)) * 0.75)) : 0;
+    mouthVal.current = THREE.MathUtils.lerp(mouthVal.current, tm, 0.2);
+
+    if (mouthRef.current) {
+      mouthRef.current.scale.y = 0.4 + mouthVal.current * 1.5;
+      mouthRef.current.position.y = -0.21 - mouthVal.current * 0.03;
+    }
+    if (lowerLipRef.current) {
+      lowerLipRef.current.position.y = -0.26 - mouthVal.current * 0.06;
+    }
+    if (jawRef.current) {
+      jawRef.current.position.y = -0.42 - mouthVal.current * 0.04;
+      jawRef.current.scale.y = 1 + mouthVal.current * 0.05;
+    }
+
+    const blink = Math.sin(t * 0.45 + offset);
+    const blinkAmt = blink > 0.94 ? Math.max(0.08, 1.0 - (blink - 0.94) * 16) : 1.0;
+    if (leftEyeGrpRef.current) leftEyeGrpRef.current.scale.y = blinkAmt;
+    if (rightEyeGrpRef.current) rightEyeGrpRef.current.scale.y = blinkAmt;
+
+    const lookX = Math.sin(t * 0.35 + offset) * 0.02;
+    const lookY = Math.sin(t * 0.25 + offset + 1) * 0.01;
+    if (leftIrisRef.current) {
+      leftIrisRef.current.position.x = lookX;
+      leftIrisRef.current.position.y = lookY;
+    }
+    if (rightIrisRef.current) {
+      rightIrisRef.current.position.x = lookX;
+      rightIrisRef.current.position.y = lookY;
+    }
+
+    const browY = emotion === "stern" ? -0.03 : emotion === "curious" ? 0.04 : 0;
+    const browTilt = emotion === "stern" ? 0.12 : emotion === "curious" ? -0.06 : 0;
+    if (leftBrowRef.current) {
+      leftBrowRef.current.position.y = THREE.MathUtils.lerp(leftBrowRef.current.position.y, 0.45 + browY, 0.05);
+      leftBrowRef.current.rotation.z = THREE.MathUtils.lerp(leftBrowRef.current.rotation.z, browTilt, 0.05);
+    }
+    if (rightBrowRef.current) {
+      rightBrowRef.current.position.y = THREE.MathUtils.lerp(rightBrowRef.current.position.y, 0.45 + browY, 0.05);
+      rightBrowRef.current.rotation.z = THREE.MathUtils.lerp(rightBrowRef.current.rotation.z, -browTilt, 0.05);
+    }
   });
 
   return (
     <group ref={groupRef}>
-      {positions.map(([x, z], i) => (
-        <mesh key={i} position={[x, -0.5, z]}>
-          <cylinderGeometry args={[0.002, 0.002, 3.5, 4]} />
-          <meshBasicMaterial
-            color={color}
-            transparent
-            opacity={0.06 + (i % 3) * 0.02}
-            blending={THREE.AdditiveBlending}
-            depthWrite={false}
-          />
-        </mesh>
-      ))}
-    </group>
-  );
-}
+      {/* ── Head ── */}
+      <mesh geometry={headGeo} castShadow receiveShadow>
+        <meshStandardMaterial
+          color={skinBase}
+          roughness={0.55}
+          metalness={0.02}
+          emissive={new THREE.Color(colors.emissive)}
+          emissiveIntensity={0.1}
+        />
+      </mesh>
 
-function HumanHead({ emotion, isSpeaking, bpm, index = 0, name, isActive = true, mouthOpenness = 0 }: AvatarProps) {
-  const headGroupRef = useRef<THREE.Group>(null);
-  const wireframeRef = useRef<THREE.LineSegments>(null);
-  const solidRef = useRef<THREE.Mesh>(null);
-  const bustWireRef = useRef<THREE.LineSegments>(null);
-  const bustSolidRef = useRef<THREE.Mesh>(null);
-  const mouthRef = useRef<THREE.Mesh>(null);
+      {/* ── Forehead sculpt ── */}
+      <mesh position={[0, 0.5, 0.35]} scale={[0.6, 0.2, 0.25]}>
+        <sphereGeometry args={[1, 32, 24]} />
+        <meshStandardMaterial color={skinBase} roughness={0.55} metalness={0.02} />
+      </mesh>
 
-  const colors = EMOTION_COLORS[emotion];
-  const offset = index * (Math.PI * 2 / 3);
-  const primaryColor = new THREE.Color(colors.primary);
-  const secondaryColor = new THREE.Color(colors.secondary);
+      {/* ── Cheekbones ── */}
+      <mesh position={[-0.45, 0.08, 0.58]} scale={[0.18, 0.12, 0.15]}>
+        <sphereGeometry args={[1, 20, 16]} />
+        <meshStandardMaterial color={skinBase} roughness={0.55} metalness={0.02} />
+      </mesh>
+      <mesh position={[0.45, 0.08, 0.58]} scale={[0.18, 0.12, 0.15]}>
+        <sphereGeometry args={[1, 20, 16]} />
+        <meshStandardMaterial color={skinBase} roughness={0.55} metalness={0.02} />
+      </mesh>
 
-  const headGeo = useMemo(() => createHumanHeadGeometry(), []);
-  const headEdges = useMemo(() => new THREE.EdgesGeometry(headGeo, 15), [headGeo]);
+      {/* ── Hair ── */}
+      <mesh position={[0, 0.58, -0.02]} scale={[0.8, 0.5, 0.82]}>
+        <sphereGeometry args={[1, 36, 28]} />
+        <meshStandardMaterial color={hairCol} roughness={0.82} metalness={0.06} />
+      </mesh>
+      <mesh position={[0, 0.32, -0.15]} scale={[0.82, 0.42, 0.72]}>
+        <sphereGeometry args={[1, 28, 22]} />
+        <meshStandardMaterial color={hairCol} roughness={0.82} metalness={0.06} />
+      </mesh>
+      {/* Hair sides */}
+      <mesh position={[-0.58, 0.18, 0.12]} scale={[0.18, 0.3, 0.42]}>
+        <sphereGeometry args={[1, 16, 12]} />
+        <meshStandardMaterial color={hairCol} roughness={0.82} metalness={0.06} />
+      </mesh>
+      <mesh position={[0.58, 0.18, 0.12]} scale={[0.18, 0.3, 0.42]}>
+        <sphereGeometry args={[1, 16, 12]} />
+        <meshStandardMaterial color={hairCol} roughness={0.82} metalness={0.06} />
+      </mesh>
+      {/* Hair top detail */}
+      <mesh position={[0.1, 0.78, 0.1]} scale={[0.35, 0.18, 0.4]} rotation={[0.1, 0.2, 0.15]}>
+        <sphereGeometry args={[1, 16, 12]} />
+        <meshStandardMaterial color={hairCol} roughness={0.82} metalness={0.06} />
+      </mesh>
+      <mesh position={[-0.15, 0.76, 0.15]} scale={[0.3, 0.15, 0.35]} rotation={[-0.05, -0.1, -0.1]}>
+        <sphereGeometry args={[1, 16, 12]} />
+        <meshStandardMaterial color={hairCol} roughness={0.82} metalness={0.06} />
+      </mesh>
 
-  const bustGeo = useMemo(() => createBustGeometry(), []);
-  const bustEdges = useMemo(() => new THREE.EdgesGeometry(bustGeo, 12), [bustGeo]);
-
-  const mouthOpen = useRef(0);
-
-  useFrame((state) => {
-    const t = state.clock.elapsedTime;
-
-    if (headGroupRef.current) {
-      headGroupRef.current.rotation.y = Math.sin(t * 0.3 + offset) * (isActive ? 0.2 : 0.08);
-      headGroupRef.current.rotation.x = Math.sin(t * 0.2 + offset) * 0.06;
-      const curScale = headGroupRef.current.scale.x;
-      const tgtScale = isActive ? 1.0 : 0.88;
-      headGroupRef.current.scale.setScalar(THREE.MathUtils.lerp(curScale, tgtScale, 0.04));
-    }
-
-    if (wireframeRef.current) {
-      const mat = wireframeRef.current.material as THREE.LineBasicMaterial;
-      const pulse = Math.sin(t * 2 + offset) * 0.15;
-      mat.opacity = (isActive ? 0.7 : 0.4) + pulse;
-    }
-
-    if (solidRef.current) {
-      const mat = solidRef.current.material as THREE.MeshBasicMaterial;
-      mat.opacity = (isActive ? 0.06 : 0.03) + Math.sin(t * 1.5) * 0.02;
-    }
-
-    if (bustWireRef.current) {
-      const mat = bustWireRef.current.material as THREE.LineBasicMaterial;
-      mat.opacity = (isActive ? 0.35 : 0.2) + Math.sin(t * 1.8) * 0.1;
-    }
-
-    if (bustSolidRef.current) {
-      const mat = bustSolidRef.current.material as THREE.MeshBasicMaterial;
-      mat.opacity = (isActive ? 0.03 : 0.015);
-    }
-
-    const targetMouth = isSpeaking ? (mouthOpenness ?? (0.3 + Math.abs(Math.sin(t * 12)) * 0.7)) : 0;
-    mouthOpen.current = THREE.MathUtils.lerp(mouthOpen.current, targetMouth, 0.25);
-
-    if (mouthRef.current) {
-      const open = mouthOpen.current;
-      mouthRef.current.scale.y = 0.02 + open * 0.08;
-      const mat = mouthRef.current.material as THREE.MeshBasicMaterial;
-      mat.opacity = 0.3 + open * 0.5;
-    }
-  });
-
-  return (
-    <group>
-      <HologramRings color={colors.primary} isSpeaking={isSpeaking} />
-      <BaseGlow color={colors.primary} />
-      <VerticalBeams color={colors.primary} />
-      <ScanLine color={colors.primary} />
-      <HologramParticles color={colors.primary} count={1500} />
-
-      <group ref={headGroupRef}>
-        <lineSegments ref={wireframeRef} geometry={headEdges}>
-          <lineBasicMaterial
-            color={primaryColor}
-            transparent
-            opacity={0.7}
-            depthWrite={false}
-            blending={THREE.AdditiveBlending}
-          />
-        </lineSegments>
-
-        <mesh ref={solidRef} geometry={headGeo}>
-          <meshBasicMaterial
-            color={primaryColor}
-            transparent
-            opacity={0.06}
-            side={THREE.FrontSide}
-            depthWrite={false}
-            blending={THREE.AdditiveBlending}
-          />
-        </mesh>
-
-        <group position={[0, 0.25, 0.72]}>
-          <mesh position={[-0.28, 0, 0.1]}>
-            <sphereGeometry args={[0.09, 16, 16]} />
-            <meshBasicMaterial
-              color={primaryColor}
-              transparent
-              opacity={0.5}
-              blending={THREE.AdditiveBlending}
-              depthWrite={false}
-            />
+      {/* ── Eyes ── */}
+      <group position={[0, 0.2, 0.65]}>
+        {/* Left eye */}
+        <group ref={leftEyeGrpRef} position={[-0.25, 0, 0.12]}>
+          <mesh>
+            <sphereGeometry args={[0.1, 28, 28]} />
+            <meshStandardMaterial color={0xf8f4f0} roughness={0.08} metalness={0} />
           </mesh>
-          <mesh position={[0.28, 0, 0.1]}>
-            <sphereGeometry args={[0.09, 16, 16]} />
-            <meshBasicMaterial
-              color={primaryColor}
-              transparent
-              opacity={0.5}
-              blending={THREE.AdditiveBlending}
-              depthWrite={false}
-            />
+          <group ref={leftIrisRef}>
+            <mesh position={[0, 0, 0.075]}>
+              <sphereGeometry args={[0.055, 24, 24]} />
+              <meshStandardMaterial
+                color={0x3d5c4a}
+                roughness={0.15}
+                metalness={0.1}
+                emissive={new THREE.Color(colors.primary)}
+                emissiveIntensity={0.08}
+              />
+            </mesh>
+            <mesh position={[0, 0, 0.09]}>
+              <sphereGeometry args={[0.028, 20, 20]} />
+              <meshStandardMaterial color={0x050505} roughness={0.05} metalness={0} />
+            </mesh>
+            <mesh position={[-0.015, 0.015, 0.1]}>
+              <sphereGeometry args={[0.008, 8, 8]} />
+              <meshBasicMaterial color={0xffffff} />
+            </mesh>
+          </group>
+        </group>
+        {/* Right eye */}
+        <group ref={rightEyeGrpRef} position={[0.25, 0, 0.12]}>
+          <mesh>
+            <sphereGeometry args={[0.1, 28, 28]} />
+            <meshStandardMaterial color={0xf8f4f0} roughness={0.08} metalness={0} />
           </mesh>
-          <mesh position={[-0.28, 0, 0.12]}>
-            <sphereGeometry args={[0.04, 12, 12]} />
-            <meshBasicMaterial
-              color={0xffffff}
-              transparent
-              opacity={0.9}
-              blending={THREE.AdditiveBlending}
-              depthWrite={false}
-            />
-          </mesh>
-          <mesh position={[0.28, 0, 0.12]}>
-            <sphereGeometry args={[0.04, 12, 12]} />
-            <meshBasicMaterial
-              color={0xffffff}
-              transparent
-              opacity={0.9}
-              blending={THREE.AdditiveBlending}
-              depthWrite={false}
-            />
-          </mesh>
+          <group ref={rightIrisRef}>
+            <mesh position={[0, 0, 0.075]}>
+              <sphereGeometry args={[0.055, 24, 24]} />
+              <meshStandardMaterial
+                color={0x3d5c4a}
+                roughness={0.15}
+                metalness={0.1}
+                emissive={new THREE.Color(colors.primary)}
+                emissiveIntensity={0.08}
+              />
+            </mesh>
+            <mesh position={[0, 0, 0.09]}>
+              <sphereGeometry args={[0.028, 20, 20]} />
+              <meshStandardMaterial color={0x050505} roughness={0.05} metalness={0} />
+            </mesh>
+            <mesh position={[0.015, 0.015, 0.1]}>
+              <sphereGeometry args={[0.008, 8, 8]} />
+              <meshBasicMaterial color={0xffffff} />
+            </mesh>
+          </group>
         </group>
 
-        <mesh ref={mouthRef} position={[0, -0.22, 0.85]}>
-          <boxGeometry args={[0.2, 0.02, 0.04]} />
-          <meshBasicMaterial
-            color={primaryColor}
-            transparent
-            opacity={0.3}
-            blending={THREE.AdditiveBlending}
-            depthWrite={false}
-          />
+        {/* Upper eyelids */}
+        <mesh position={[-0.25, 0.06, 0.12]} scale={[0.12, 0.025, 0.06]} rotation={[0.15, 0, 0]}>
+          <sphereGeometry args={[1, 16, 8]} />
+          <meshStandardMaterial color={skinBase} roughness={0.55} metalness={0.02} />
         </mesh>
-
-        <group position={[0, -1.1, 0]}>
-          <lineSegments ref={bustWireRef} geometry={bustEdges}>
-            <lineBasicMaterial
-              color={secondaryColor}
-              transparent
-              opacity={0.35}
-              depthWrite={false}
-              blending={THREE.AdditiveBlending}
-            />
-          </lineSegments>
-          <mesh ref={bustSolidRef} geometry={bustGeo}>
-            <meshBasicMaterial
-              color={secondaryColor}
-              transparent
-              opacity={0.03}
-              side={THREE.FrontSide}
-              depthWrite={false}
-              blending={THREE.AdditiveBlending}
-            />
-          </mesh>
-        </group>
-
-        {isActive && isSpeaking && (
-          <mesh position={[0, 0, -0.3]}>
-            <sphereGeometry args={[1.3, 24, 24]} />
-            <meshBasicMaterial
-              color={primaryColor}
-              transparent
-              opacity={0.04}
-              side={THREE.BackSide}
-              depthWrite={false}
-              blending={THREE.AdditiveBlending}
-            />
-          </mesh>
-        )}
+        <mesh position={[0.25, 0.06, 0.12]} scale={[0.12, 0.025, 0.06]} rotation={[0.15, 0, 0]}>
+          <sphereGeometry args={[1, 16, 8]} />
+          <meshStandardMaterial color={skinBase} roughness={0.55} metalness={0.02} />
+        </mesh>
+        {/* Lower eyelids */}
+        <mesh position={[-0.25, -0.06, 0.11]} scale={[0.11, 0.012, 0.05]} rotation={[-0.08, 0, 0]}>
+          <sphereGeometry args={[1, 16, 8]} />
+          <meshStandardMaterial color={skinDark} roughness={0.6} metalness={0.02} />
+        </mesh>
+        <mesh position={[0.25, -0.06, 0.11]} scale={[0.11, 0.012, 0.05]} rotation={[-0.08, 0, 0]}>
+          <sphereGeometry args={[1, 16, 8]} />
+          <meshStandardMaterial color={skinDark} roughness={0.6} metalness={0.02} />
+        </mesh>
       </group>
 
-      {name && (
-        <group position={[0, -2.1, 0]}>
-          <mesh>
-            <planeGeometry args={[1.6, 0.22]} />
-            <meshBasicMaterial color={0x000000} transparent opacity={0.5} />
-          </mesh>
-        </group>
+      {/* ── Eyebrows ── */}
+      <mesh ref={leftBrowRef} position={[-0.25, 0.45, 0.72]} scale={[0.13, 0.018, 0.028]} rotation={[0.08, 0, 0.05]}>
+        <capsuleGeometry args={[1, 0.5, 4, 14]} />
+        <meshStandardMaterial color={browCol} roughness={0.85} />
+      </mesh>
+      <mesh ref={rightBrowRef} position={[0.25, 0.45, 0.72]} scale={[0.13, 0.018, 0.028]} rotation={[0.08, 0, -0.05]}>
+        <capsuleGeometry args={[1, 0.5, 4, 14]} />
+        <meshStandardMaterial color={browCol} roughness={0.85} />
+      </mesh>
+
+      {/* ── Nose ── */}
+      <mesh position={[0, 0.06, 0.82]} scale={[0.055, 0.16, 0.08]}>
+        <sphereGeometry args={[1, 20, 20]} />
+        <meshStandardMaterial color={skinBase} roughness={0.5} metalness={0.02} />
+      </mesh>
+      <mesh position={[0, -0.06, 0.92]} scale={[0.075, 0.055, 0.06]}>
+        <sphereGeometry args={[1, 24, 24]} />
+        <meshStandardMaterial color={skinBase} roughness={0.45} metalness={0.02} />
+      </mesh>
+      {/* Nostrils */}
+      <mesh position={[-0.04, -0.08, 0.9]} scale={[0.035, 0.025, 0.03]}>
+        <sphereGeometry args={[1, 12, 12]} />
+        <meshStandardMaterial color={skinDark} roughness={0.6} />
+      </mesh>
+      <mesh position={[0.04, -0.08, 0.9]} scale={[0.035, 0.025, 0.03]}>
+        <sphereGeometry args={[1, 12, 12]} />
+        <meshStandardMaterial color={skinDark} roughness={0.6} />
+      </mesh>
+
+      {/* ── Mouth ── */}
+      {/* Upper lip */}
+      <mesh position={[0, -0.18, 0.84]} scale={[0.13, 0.022, 0.05]}>
+        <sphereGeometry args={[1, 22, 12]} />
+        <meshStandardMaterial color={lipCol} roughness={0.35} metalness={0} />
+      </mesh>
+      {/* Philtrum */}
+      <mesh position={[0, -0.12, 0.88]} scale={[0.025, 0.04, 0.015]}>
+        <sphereGeometry args={[1, 10, 10]} />
+        <meshStandardMaterial color={skinDark} roughness={0.6} transparent opacity={0.4} />
+      </mesh>
+      {/* Lower lip */}
+      <mesh ref={lowerLipRef} position={[0, -0.26, 0.82]} scale={[0.11, 0.028, 0.045]}>
+        <sphereGeometry args={[1, 22, 12]} />
+        <meshStandardMaterial color={lipCol.clone().multiplyScalar(0.9)} roughness={0.3} metalness={0} />
+      </mesh>
+      {/* Mouth opening */}
+      <mesh ref={mouthRef} position={[0, -0.21, 0.82]} scale={[0.09, 0.4, 0.03]}>
+        <sphereGeometry args={[1, 14, 10]} />
+        <meshStandardMaterial color={0x1a0808} roughness={0.9} />
+      </mesh>
+
+      {/* ── Chin ── */}
+      <mesh ref={jawRef} position={[0, -0.42, 0.52]} scale={[0.17, 0.12, 0.15]}>
+        <sphereGeometry args={[1, 22, 22]} />
+        <meshStandardMaterial color={skinBase} roughness={0.55} metalness={0.02} />
+      </mesh>
+
+      {/* Slight stubble / jaw definition */}
+      <mesh position={[0, -0.35, 0.45]} scale={[0.35, 0.15, 0.32]}>
+        <sphereGeometry args={[1, 18, 14]} />
+        <meshStandardMaterial color={skinDark} roughness={0.65} metalness={0.02} />
+      </mesh>
+
+      {/* ── Ears ── */}
+      <mesh position={[-0.68, 0.08, 0.08]} scale={[0.08, 0.12, 0.06]} rotation={[0, 0.3, 0]}>
+        <sphereGeometry args={[1, 14, 14]} />
+        <meshStandardMaterial color={skinDark} roughness={0.6} metalness={0.02} />
+      </mesh>
+      <mesh position={[0.68, 0.08, 0.08]} scale={[0.08, 0.12, 0.06]} rotation={[0, -0.3, 0]}>
+        <sphereGeometry args={[1, 14, 14]} />
+        <meshStandardMaterial color={skinDark} roughness={0.6} metalness={0.02} />
+      </mesh>
+
+      {/* ── Neck ── */}
+      <mesh position={[0, -0.7, 0.05]}>
+        <cylinderGeometry args={[0.16, 0.2, 0.35, 18]} />
+        <meshStandardMaterial color={skinDark} roughness={0.6} metalness={0.02} />
+      </mesh>
+
+      {/* ── Blazer / Jacket ── */}
+      <group position={[0, -1.25, 0]}>
+        {/* Main torso */}
+        <mesh castShadow>
+          <cylinderGeometry args={[0.35, 0.55, 0.7, 22, 4, false]} />
+          <meshStandardMaterial
+            color={0x1a1a2e}
+            roughness={0.65}
+            metalness={0.12}
+            emissive={new THREE.Color(colors.primary)}
+            emissiveIntensity={0.02}
+          />
+        </mesh>
+        {/* Collar / lapels */}
+        <mesh position={[0, 0.33, 0.28]} scale={[0.5, 0.08, 0.2]}>
+          <sphereGeometry args={[1, 16, 12]} />
+          <meshStandardMaterial color={0x222240} roughness={0.6} metalness={0.1} />
+        </mesh>
+        {/* Inner shirt/t-shirt visible at collar */}
+        <mesh position={[0, 0.32, 0.3]} scale={[0.3, 0.06, 0.12]}>
+          <sphereGeometry args={[1, 14, 10]} />
+          <meshStandardMaterial color={0x3a3a4a} roughness={0.7} metalness={0.05} />
+        </mesh>
+        {/* Shoulders */}
+        <mesh position={[-0.42, 0.15, 0]} scale={[0.22, 0.25, 0.2]} rotation={[0, 0, 0.25]}>
+          <sphereGeometry args={[1, 14, 12]} />
+          <meshStandardMaterial color={0x1a1a2e} roughness={0.65} metalness={0.12} />
+        </mesh>
+        <mesh position={[0.42, 0.15, 0]} scale={[0.22, 0.25, 0.2]} rotation={[0, 0, -0.25]}>
+          <sphereGeometry args={[1, 14, 12]} />
+          <meshStandardMaterial color={0x1a1a2e} roughness={0.65} metalness={0.12} />
+        </mesh>
+      </group>
+
+      {/* ── Subtle glow when speaking ── */}
+      {isActive && isSpeaking && (
+        <mesh position={[0, 0, -0.2]}>
+          <sphereGeometry args={[1.2, 20, 20]} />
+          <meshBasicMaterial
+            color={colors.primary}
+            transparent
+            opacity={0.03}
+            side={THREE.BackSide}
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+          />
+        </mesh>
       )}
     </group>
   );
@@ -519,30 +532,37 @@ export default function Avatar3D({
   }, [panelMode, panelMembers, activeIndex, isSpeaking]);
 
   return (
-    <div className="w-full h-full relative" style={{ background: "radial-gradient(ellipse at center, #030a18 0%, #000408 70%)" }}>
+    <div className="w-full h-full relative" style={{ background: "radial-gradient(ellipse at center, #0a1628 0%, #000408 70%)" }}>
       <Canvas
-        camera={{ position: [0, 0, 4.5], fov: 42 }}
+        camera={{ position: [0, 0.15, 3.5], fov: 36 }}
         dpr={[1, 1.5]}
-        gl={{ antialias: true, alpha: true, toneMapping: THREE.NoToneMapping }}
+        gl={{ antialias: true, alpha: true }}
+        shadows
       >
         <color attach="background" args={["#000408"]} />
-        <fog attach="fog" args={["#000408", 6, 14]} />
+        <fog attach="fog" args={["#000408", 5, 12]} />
 
-        <ambientLight intensity={0.08} />
-        <pointLight position={[0, 3, 3]} intensity={0.3} color={EMOTION_COLORS[emotion].primary} />
+        <ambientLight intensity={0.35} />
+        <directionalLight position={[2, 3, 4]} intensity={1.4} color={0xfff0e0} castShadow />
+        <directionalLight position={[-3, 1, -2]} intensity={0.25} color={EMOTION_COLORS[emotion].primary} />
+        <pointLight position={[0, 2, 3]} intensity={0.6} color={0xfff5e6} />
+        <pointLight position={[0, -1, 2]} intensity={0.2} color={EMOTION_COLORS[emotion].primary} />
+        <pointLight position={[-2, 0, 1]} intensity={0.15} color={0x88aaff} />
 
-        <Stars radius={8} depth={30} count={1500} factor={2} saturation={0.1} fade speed={0.5} />
+        <Stars radius={8} depth={25} count={700} factor={1.8} saturation={0.1} fade speed={0.3} />
+        <AmbientParticles color={EMOTION_COLORS[emotion].primary} count={500} />
+        <SubtleRings color={EMOTION_COLORS[emotion].primary} />
 
         {panelMode && panelMembers ? (
           <group>
             {panelMembers.map((member, i) => {
               const count = panelMembers.length;
-              const spacing = Math.min(3.5, 7 / count);
+              const spacing = Math.min(3.2, 6.5 / count);
               const x = (i - (count - 1) / 2) * spacing;
               return (
-                <group key={i} position={[x, 0.3, 0]} scale={count > 2 ? 0.55 : 0.7}>
-                  <Float speed={1.5} rotationIntensity={0.08} floatIntensity={0.15}>
-                    <HumanHead
+                <group key={i} position={[x, 0.2, 0]} scale={count > 2 ? 0.55 : 0.7}>
+                  <Float speed={1.2} rotationIntensity={0.04} floatIntensity={0.08}>
+                    <HumanAvatar
                       emotion={member.emotion}
                       isSpeaking={speakingStates[i]}
                       bpm={bpm}
@@ -557,8 +577,8 @@ export default function Avatar3D({
             })}
           </group>
         ) : (
-          <Float speed={1.8} rotationIntensity={0.1} floatIntensity={0.2}>
-            <HumanHead
+          <Float speed={1.3} rotationIntensity={0.04} floatIntensity={0.1}>
+            <HumanAvatar
               emotion={emotion}
               isSpeaking={isSpeaking}
               bpm={bpm}
@@ -575,18 +595,12 @@ export default function Avatar3D({
             repeating-linear-gradient(
               0deg,
               transparent,
-              transparent 2px,
-              rgba(0,212,255,0.015) 2px,
-              rgba(0,212,255,0.015) 4px
+              transparent 3px,
+              rgba(0,212,255,0.006) 3px,
+              rgba(0,212,255,0.006) 4px
             )
           `,
           mixBlendMode: "screen",
-        }}
-      />
-
-      <div className="absolute bottom-0 left-0 right-0 h-1/4 pointer-events-none"
-        style={{
-          background: `linear-gradient(to top, rgba(0,4,8,0.8), transparent)`,
         }}
       />
     </div>
