@@ -20,9 +20,38 @@
  *  10. Adaptive EMA smoothing keyed to signal quality
  *
  * References:
- *  - Wang et al. 2017 "Algorithmic Principles of Remote PPG" (POS)
- *  - De Haan & Jeanne 2013 "Robust Pulse Rate from Chrominance" (CHROM)
- *  - habom2310, webcam-pulse-detector, cortictechnology, erdewit/heartwave
+ *  [1] Wang et al. 2017, "Algorithmic Principles of Remote PPG" — IEEE TBME
+ *      https://ieeexplore.ieee.org/document/7565547
+ *  [2] De Haan & Jeanne 2013, "Robust Pulse Rate from Chrominance" — IEEE TBME
+ *      https://ieeexplore.ieee.org/document/9983619
+ *  [3] UBF-rPPG Benchmark — Université de Bourgogne
+ *      https://sites.google.com/view/ybenezeth/ubfcrppg
+ *  [4] UW Ubicomp Lab — Browser-Based rPPG
+ *      https://github.com/ubicomplab/rppg-web
+ *  [5] rPPG State-of-the-Art Review — PMC/NIH 2024
+ *      https://pmc.ncbi.nlm.nih.gov/articles/PMC11362249/
+ *  [6] Neural rPPG Datasets & Benchmarks — NeurIPS 2023
+ *      https://proceedings.neurips.cc/paper_files/paper/2023/hash/d7d0d548a6317407e02230f15ce75817-Abstract-Datasets_and_Benchmarks.html
+ *  [7] Philips Biosensing by rPPG — IP Licensing
+ *      https://www.philips.com/a-w/about/innovation/ips/ip-licensing/programs/biosensing-by-rppg.html
+ *  [8] UCLA Visual Computing — rPPG with Synthetic Avatars
+ *      https://visual.ee.ucla.edu/rppg_avatars.htm/
+ *  [9] rPPG-10 Multi-Algorithm Benchmark
+ *      https://github.com/GRodrigues4/rPPG-10
+ *  [10] FaceHeart — Industrial rPPG Technology
+ *       https://faceheart.com/technology.php
+ *  [11] Optica rPPG Signal Quality — Optical Continuum 2023
+ *       https://opg.optica.org/optcon/fulltext.cfm?uri=optcon-2-12-2540
+ *  [12] St Andrews University — rPPG State-of-the-Art Review
+ *       https://research-portal.st-andrews.ac.uk/en/publications/remote-photoplethysmography-rppg-a-state-of-the-art-review/
+ *  [13] Biosensors MDPI — rPPG Engineering Review 2023
+ *       https://www.mdpi.com/2306-5354/10/2/243
+ *  [14] Noldus — What is rPPG (overview)
+ *       https://noldus.com/blog/what-is-rppg
+ *  [15] IMA AppWeb — rPPG Development Guide
+ *       https://www.ima-appweb.com/blog/remote-photoplethysmography-rppg-development/
+ *
+ *  Also informed by: habom2310, webcam-pulse-detector, cortictechnology, erdewit/heartwave
  */
 import { useRef, useState, useEffect, useCallback } from "react";
 import type { FaceBox } from "./useFaceDetection";
