@@ -113,8 +113,10 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
     if (!micOn) return;
     if (speech.finalText) {
       setUserInput(speech.finalText);
+    } else if (speech.interimText) {
+      setUserInput(speech.interimText);
     }
-  }, [speech.finalText, micOn]);
+  }, [speech.finalText, speech.interimText, micOn]);
 
   const toggleMic = useCallback(async () => {
     if (micOn) {
@@ -756,12 +758,12 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
 
           {/* ── Input Bar ─────────────────────────────────────────── */}
           <div className="shrink-0 p-3 border-t border-cyan-500/20 bg-black/60">
-            {/* Mic live indicator with level meter */}
+            {/* Mic live indicator */}
             {micOn && (
               <div className="flex items-center gap-2 mb-2 px-1">
                 <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
                 <span className="text-xs font-mono text-red-400 uppercase tracking-widest">
-                  Recording
+                  Listening
                 </span>
                 <div className="flex items-center gap-1 ml-1">
                   {[...Array(10)].map((_, i) => (
@@ -777,9 +779,11 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
                     />
                   ))}
                 </div>
-                <span className="text-[10px] font-mono text-cyan-500/50 ml-1">
-                  {speech.audioLevel > 5 ? "Hearing you" : "No audio detected"}
-                </span>
+                {speech.interimText && (
+                  <span className="text-[10px] font-mono text-cyan-400/60 italic truncate ml-1 max-w-[200px]">
+                    {speech.interimText.slice(0, 50)}{speech.interimText.length > 50 ? "…" : ""}
+                  </span>
+                )}
               </div>
             )}
 
