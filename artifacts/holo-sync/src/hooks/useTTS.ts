@@ -1,4 +1,4 @@
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useEffect } from "react";
 
 type Voice = "alloy" | "echo" | "fable" | "onyx" | "nova" | "shimmer";
 
@@ -12,6 +12,22 @@ interface TTSOptions {
 export function useTTS() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const animFrameRef = useRef<number>(0);
+  const amplitudeRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      cancelAnimationFrame(animFrameRef.current);
+      if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
+        audioCtxRef.current.close().catch(() => {});
+      }
+    };
+  }, []);
+
+  const getAmplitude = useCallback(() => amplitudeRef.current, []);
 
   const speak = useCallback(async (text: string, options: TTSOptions = {}): Promise<void> => {
     const { voice = "nova", onStart, onEnd, onError } = options;
@@ -23,6 +39,8 @@ export function useTTS() {
       audioRef.current.pause();
       audioRef.current.src = "";
     }
+    cancelAnimationFrame(animFrameRef.current);
+    amplitudeRef.current = 0;
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -46,21 +64,59 @@ export function useTTS() {
 
       return new Promise<void>((resolve) => {
         const audio = new Audio(url);
+        audio.crossOrigin = "anonymous";
         audioRef.current = audio;
 
-        audio.onplay = () => onStart?.();
+        if (!audioCtxRef.current || audioCtxRef.current.state === "closed") {
+          audioCtxRef.current = new AudioContext();
+        }
+        const ctx = audioCtxRef.current;
+
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.4;
+        analyserRef.current = analyser;
+
+        const source = ctx.createMediaElementSource(audio);
+        sourceRef.current = source;
+        source.connect(analyser);
+        analyser.connect(ctx.destination);
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        const pumpAmplitude = () => {
+          analyser.getByteFrequencyData(dataArray);
+          let sum = 0;
+          const len = Math.min(64, dataArray.length);
+          for (let i = 0; i < len; i++) sum += dataArray[i];
+          amplitudeRef.current = Math.min(1, (sum / len / 255) * 2.5);
+          animFrameRef.current = requestAnimationFrame(pumpAmplitude);
+        };
+
+        audio.onplay = () => {
+          if (ctx.state === "suspended") ctx.resume();
+          pumpAmplitude();
+          onStart?.();
+        };
         audio.onended = () => {
+          cancelAnimationFrame(animFrameRef.current);
+          amplitudeRef.current = 0;
+          source.disconnect();
           URL.revokeObjectURL(url);
           onEnd?.();
           resolve();
         };
         audio.onerror = () => {
+          cancelAnimationFrame(animFrameRef.current);
+          amplitudeRef.current = 0;
+          source.disconnect();
           URL.revokeObjectURL(url);
           onError?.();
           resolve();
         };
 
         audio.play().catch(() => {
+          cancelAnimationFrame(animFrameRef.current);
+          amplitudeRef.current = 0;
           URL.revokeObjectURL(url);
           onError?.();
           resolve();
@@ -75,6 +131,8 @@ export function useTTS() {
 
   const stop = useCallback(() => {
     if (abortRef.current) abortRef.current.abort();
+    cancelAnimationFrame(animFrameRef.current);
+    amplitudeRef.current = 0;
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.src = "";
@@ -82,7 +140,7 @@ export function useTTS() {
     window.speechSynthesis?.cancel();
   }, []);
 
-  return { speak, stop };
+  return { speak, stop, getAmplitude };
 }
 
 function fallbackSpeak(

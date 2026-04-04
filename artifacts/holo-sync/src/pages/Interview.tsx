@@ -68,10 +68,7 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
   const [micOn, setMicOn] = useState(false);
   const [answerCount, setAnswerCount] = useState(0);
   const [activeSpeakerIndex, setActiveSpeakerIndex] = useState(0);
-  const [mouthOpenness, setMouthOpenness] = useState(0);
   const [spokenText, setSpokenText] = useState("");
-  const mouthAnimRef = useRef<number>(0);
-  const mouthAnimActiveRef = useRef(false);
   const speechRunIdRef = useRef(0);
   const bpmHistoryRef = useRef<number[]>([]);
   const lastHrCommentRef = useRef(0);
@@ -139,28 +136,6 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
     }]);
   }, []);
 
-  const startMouthAnimation = useCallback(() => {
-    if (mouthAnimActiveRef.current) {
-      cancelAnimationFrame(mouthAnimRef.current);
-    }
-    mouthAnimActiveRef.current = true;
-    let frame = 0;
-    const animate = () => {
-      if (!mouthAnimActiveRef.current) return;
-      frame++;
-      const t = frame * 0.033;
-      const open = 0.2 + Math.abs(Math.sin(t * 8)) * 0.5 + Math.abs(Math.sin(t * 13)) * 0.3;
-      setMouthOpenness(open);
-      mouthAnimRef.current = requestAnimationFrame(animate);
-    };
-    mouthAnimRef.current = requestAnimationFrame(animate);
-  }, []);
-
-  const stopMouthAnimation = useCallback(() => {
-    mouthAnimActiveRef.current = false;
-    cancelAnimationFrame(mouthAnimRef.current);
-    setMouthOpenness(0);
-  }, []);
 
   const speakMessage = useCallback(async (text: string, avatarName?: string, flagged?: boolean, avatarIndex?: number): Promise<void> => {
     const runId = ++speechRunIdRef.current;
@@ -176,8 +151,6 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
     setSpokenText(text);
     if (avatarIndex !== undefined) setActiveSpeakerIndex(avatarIndex);
     addMessage({ role: "avatar", text, avatarName, flagged });
-
-    startMouthAnimation();
 
     if (micOn) stopListening();
 
@@ -204,14 +177,12 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
         if (runId !== speechRunIdRef.current) return;
         setIsSpeaking(false);
         setSpokenText("");
-        stopMouthAnimation();
         if (micOn) { clearCurrentAnswer(); startListening(); }
       },
       onError: () => {
         if (runId !== speechRunIdRef.current) return;
         setIsSpeaking(false);
         setSpokenText("");
-        stopMouthAnimation();
         if (micOn) { clearCurrentAnswer(); startListening(); }
       },
     });
@@ -219,9 +190,8 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
     if (runId === speechRunIdRef.current) {
       setIsSpeaking(false);
       setSpokenText("");
-      stopMouthAnimation();
     }
-  }, [addMessage, micOn, startListening, stopListening, clearCurrentAnswer, startMouthAnimation, stopMouthAnimation, tts]);
+  }, [addMessage, micOn, startListening, stopListening, clearCurrentAnswer, tts]);
 
   useEffect(() => {
     const init = async () => {
@@ -253,7 +223,6 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
     return () => {
       stopWebcam(); stopHeartbeat();
       stopListening();
-      stopMouthAnimation();
       tts.stop();
     };
   }, []);
@@ -722,7 +691,7 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
               panelMode={domain.panelMode}
               panelAvatars={panelAvatars}
               activeSpeakerIndex={activeSpeakerIndex}
-              mouthOpenness={mouthOpenness}
+              getAmplitude={tts.getAmplitude}
               spokenText={spokenText}
             />
 
