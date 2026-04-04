@@ -155,16 +155,16 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
     if (micOn) stopListening();
 
     const voiceMap: Record<string, "alloy" | "echo" | "fable" | "onyx" | "nova" | "shimmer"> = {
-      "CHAIRMAN SINGH": "onyx",
-      "MEMBER DR. SHARMA": "echo",
+      "CHAIRMAN SINGH": "shimmer",
+      "MEMBER DR. SHARMA": "nova",
       "MEMBER ADV. KRISHNA": "fable",
-      "BRIG. MEHTA": "onyx",
-      "COL. VERMA": "echo",
+      "BRIG. MEHTA": "shimmer",
+      "COL. VERMA": "nova",
       "WING CDR. NAIR": "fable",
       "EXAMINER": "nova",
       "MD RAJIV KAPOOR": "onyx",
       "HOLO-AI": "nova",
-      "CHAIRMAN": "onyx",
+      "CHAIRMAN": "shimmer",
     };
     const selectedVoice = voiceMap[avatarName || ""] || "nova";
 
