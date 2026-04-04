@@ -15,13 +15,13 @@ import { useTTS } from "../hooks/useTTS";
 import { useEyeContact } from "../hooks/useEyeContact";
 import type { FaceBox } from "../hooks/useFaceDetection";
 import {
-  EMPATHY_RESPONSES,
+  PRESSURE_RESPONSES,
   BLUFF_RESPONSES,
   HR_SPIKE_RESPONSES,
   HR_DROP_RESPONSES,
   HR_ELEVATED_RESPONSES,
-  STRESS_COOLDOWN_TRANSITIONS,
-  CALM_ESCALATION_TRANSITIONS,
+  STRESS_ESCALATION_RESPONSES,
+  CALM_ESCALATION_RESPONSES,
   PANEL_AVATARS,
   getFilteredQuestions,
   getAdaptiveQuestion,
@@ -60,7 +60,8 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
   const [avatarEmotion, setAvatarEmotion] = useState<AvatarEmotion>("neutral");
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [bluffDetected, setBluffDetected] = useState(false);
-  const [empathyMode, setEmpathyMode] = useState(false);
+  const [pressureMode, setPressureMode] = useState(false);
+  const stressMarkersRef = useRef<{questionIndex: number; bpm: number; type: string; timestamp: number}[]>([]);
   const [lastStressCheck, setLastStressCheck] = useState(0);
   const [score, setScore] = useState({ communication: 0, technical: 0, stress: 100 });
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -77,7 +78,7 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const usedQuestionIdsRef = useRef<Set<string>>(new Set());
   const adaptiveCooldownRef = useRef(0);
-  const [adaptiveMode, setAdaptiveMode] = useState<"normal" | "cooling" | "escalating">("normal");
+  const [adaptiveMode, setAdaptiveMode] = useState<"normal" | "escalating">("normal");
   const consecutiveCalmRef = useRef(0);
   const consecutiveStressRef = useRef(0);
   const activeQuestionRef = useRef<ReturnType<typeof getAdaptiveQuestion>>(null);
@@ -240,9 +241,9 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
 
   useEffect(() => {
     if (phase !== "active") return;
-    if (heartData.stress === "high" && Date.now() - lastStressCheck > 20000) {
+    if (heartData.stress === "high" && Date.now() - lastStressCheck > 25000) {
       setLastStressCheck(Date.now());
-      triggerEmpathy();
+      triggerPressure();
     }
   }, [heartData.stress, phase]);
 
@@ -256,16 +257,18 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
 
     if (type === "spike") {
       responses = HR_SPIKE_RESPONSES;
-      systemMsg = "📈 HEART RATE INCREASE DETECTED — INTERVIEWER RESPONDS";
-      emotion = "curious";
+      systemMsg = "📈 HEART RATE SPIKE — PRESSURE POINT DETECTED";
+      emotion = "stern";
+      stressMarkersRef.current.push({ questionIndex: currentQuestionIndex, bpm: heartData.bpm ?? 0, type: "hr_spike", timestamp: Date.now() });
     } else if (type === "drop") {
       responses = HR_DROP_RESPONSES;
-      systemMsg = "📉 HEART RATE DECREASE DETECTED — INTERVIEWER RESPONDS";
-      emotion = "empathetic";
+      systemMsg = "📉 HEART RATE DROP — COMPOSURE RESTORED";
+      emotion = "neutral";
     } else {
       responses = HR_ELEVATED_RESPONSES;
-      systemMsg = "⚠ SUSTAINED ELEVATED HEART RATE — INTERVIEWER CHECK-IN";
-      emotion = "empathetic";
+      systemMsg = "⚠ SUSTAINED ELEVATED HEART RATE — ENDURANCE TEST";
+      emotion = "stern";
+      stressMarkersRef.current.push({ questionIndex: currentQuestionIndex, bpm: heartData.bpm ?? 0, type: "sustained_stress", timestamp: Date.now() });
     }
 
     const bpm = heartData.bpm ?? 0;
@@ -340,14 +343,15 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
         consecutiveStressRef.current++;
         consecutiveCalmRef.current = 0;
         if (consecutiveStressRef.current >= 2) {
-          adaptiveQ = getAdaptiveQuestion(domain.id, "easy", usedQuestionIdsRef.current, config.topics);
+          adaptiveQ = getAdaptiveQuestion(domain.id, "hard", usedQuestionIdsRef.current, config.topics);
           if (adaptiveQ) {
-            transitionMsg = STRESS_COOLDOWN_TRANSITIONS[Math.floor(Math.random() * STRESS_COOLDOWN_TRANSITIONS.length)];
-            setAdaptiveMode("cooling");
+            transitionMsg = STRESS_ESCALATION_RESPONSES[Math.floor(Math.random() * STRESS_ESCALATION_RESPONSES.length)];
+            setAdaptiveMode("escalating");
             adaptiveCooldownRef.current = now;
             consecutiveStressRef.current = 0;
             didAdapt = true;
           }
+          stressMarkersRef.current.push({ questionIndex: index, bpm: Math.round(recentBpm), type: "composure_break", timestamp: now });
         }
       } else if (recentBpm < calmThreshold) {
         consecutiveCalmRef.current++;
@@ -355,7 +359,7 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
         if (consecutiveCalmRef.current >= 3) {
           adaptiveQ = getAdaptiveQuestion(domain.id, "hard", usedQuestionIdsRef.current, config.topics);
           if (adaptiveQ) {
-            transitionMsg = CALM_ESCALATION_TRANSITIONS[Math.floor(Math.random() * CALM_ESCALATION_TRANSITIONS.length)];
+            transitionMsg = CALM_ESCALATION_RESPONSES[Math.floor(Math.random() * CALM_ESCALATION_RESPONSES.length)];
             setAdaptiveMode("escalating");
             adaptiveCooldownRef.current = now;
             consecutiveCalmRef.current = 0;
@@ -379,9 +383,8 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
 
     if (transitionMsg) {
       const bpmNote = recentBpm > 0 ? ` Your current heart rate is ${Math.round(recentBpm)} BPM.` : "";
-      const modeLabel = adaptiveQ?.difficulty === "easy" ? "⬇ ADAPTIVE COOLDOWN" : "⬆ ADAPTIVE ESCALATION";
-      addMessage({ role: "system", text: `🧬 ${modeLabel} — BIOMETRIC DIFFICULTY ADJUSTMENT` });
-      setAvatarEmotion(adaptiveQ?.difficulty === "easy" ? "empathetic" : "stern");
+      addMessage({ role: "system", text: `🧬 ⬆ PRESSURE ESCALATION — BIOMETRIC DIFFICULTY INCREASE` });
+      setAvatarEmotion("stern");
       await speakMessage(transitionMsg + bpmNote, domain.panelMode ? "CHAIRMAN" : "HOLO-AI", false, 0);
       await new Promise(r => setTimeout(r, 600));
     }
@@ -406,14 +409,15 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
     }
   }, [questions, domain.id, domain.panelMode, config.topics, speakMessage, addMessage]);
 
-  const triggerEmpathy = useCallback(async () => {
-    setEmpathyMode(true);
-    setAvatarEmotion("empathetic");
-    const response = EMPATHY_RESPONSES[Math.floor(Math.random() * EMPATHY_RESPONSES.length)];
-    addMessage({ role: "system", text: "♥ HIGH HEART RATE DETECTED — EMPATHY MODE ACTIVATED" });
-    await speakMessage(response, "HOLO-AI");
-    setTimeout(() => { setEmpathyMode(false); setAvatarEmotion("neutral"); }, 5000);
-  }, [addMessage, speakMessage]);
+  const triggerPressure = useCallback(async () => {
+    setPressureMode(true);
+    setAvatarEmotion("stern");
+    const response = PRESSURE_RESPONSES[Math.floor(Math.random() * PRESSURE_RESPONSES.length)];
+    addMessage({ role: "system", text: "⚠ STRESS DETECTED — PRESSURE MAINTAINED (REAL INTERVIEW SIMULATION)" });
+    stressMarkersRef.current.push({ questionIndex: currentQuestionIndex, bpm: heartData.bpm ?? 0, type: "stress_detected", timestamp: Date.now() });
+    await speakMessage(response, domain.panelMode ? "CHAIRMAN" : "HOLO-AI");
+    setTimeout(() => { setPressureMode(false); setAvatarEmotion("neutral"); }, 5000);
+  }, [addMessage, speakMessage, currentQuestionIndex, heartData.bpm, domain.panelMode]);
 
   const handleSubmitAnswer = useCallback(async () => {
     const text = (userInput || speech.finalText).trim();
@@ -562,11 +566,11 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
     addMessage({ role: "system", text: `INTERVIEW COMPLETE — FINAL SCORE: ${finalScore}/100` });
     setAvatarEmotion("neutral");
     await speakMessage(
-      `Interview complete. Thank you for your time. You demonstrated ${finalScore > 70 ? "strong" : "developing"} capability. ${
+      `Interview complete. Your final score is ${finalScore} out of 100. ${finalScore > 70 ? "Solid performance under pressure." : "You broke composure multiple times. This is exactly what you need to train."} ${
         speech.analytics.fillerCount > 5
-          ? "Work on reducing filler words like um and uh."
-          : "Your speech delivery was clear."
-      } ${heartData.stress === "high" ? "Biometrics showed elevated stress — practise deep breathing." : "Good composure throughout."}`,
+          ? "Too many filler words. Eliminate those."
+          : "Speech delivery was acceptable."
+      } ${heartData.stress === "high" ? "Your stress levels remained elevated — that's a weakness to address." : "You maintained reasonable composure."} Review your pressure timeline to see exactly where you cracked.`,
       "HOLO-AI"
     );
     setTimeout(() => setShowReport(true), 2000);
@@ -622,22 +626,16 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
               🔍 Bluff
             </span>
           )}
-          {adaptiveMode === "cooling" && (
-            <span className="text-green-400 animate-pulse rounded-full px-2.5 py-0.5 uppercase tracking-[0.1em] text-[10px]"
-              style={{ background: "rgba(0,255,136,0.06)", border: "1px solid rgba(0,255,136,0.15)" }}>
-              ⬇ Cooling
-            </span>
-          )}
           {adaptiveMode === "escalating" && (
-            <span className="text-orange-400 animate-pulse rounded-full px-2.5 py-0.5 uppercase tracking-[0.1em] text-[10px]"
-              style={{ background: "rgba(255,170,0,0.06)", border: "1px solid rgba(255,170,0,0.15)" }}>
-              ⬆ Escalating
+            <span className="text-red-400 animate-pulse rounded-full px-2.5 py-0.5 uppercase tracking-[0.1em] text-[10px]"
+              style={{ background: "rgba(255,68,68,0.08)", border: "1px solid rgba(255,68,68,0.2)" }}>
+              ⬆ Pressure Up
             </span>
           )}
-          {empathyMode && (
-            <span className="text-emerald-400 animate-pulse rounded-full px-2.5 py-0.5 uppercase tracking-[0.1em] text-[10px]"
-              style={{ background: "rgba(0,255,136,0.06)", border: "1px solid rgba(0,255,136,0.15)" }}>
-              ♥ Empathy
+          {pressureMode && (
+            <span className="text-orange-400 animate-pulse rounded-full px-2.5 py-0.5 uppercase tracking-[0.1em] text-[10px]"
+              style={{ background: "rgba(255,170,0,0.08)", border: "1px solid rgba(255,170,0,0.2)" }}>
+              ⚠ Under Pressure
             </span>
           )}
           <button onClick={onEnd}
@@ -748,9 +746,9 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
               </div>
             )}
 
-            {empathyMode && (
+            {pressureMode && (
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
-                <div className="text-6xl animate-heartbeat opacity-15" style={{ color: "#4ecdc4", filter: "blur(1px)" }}>♥</div>
+                <div className="text-6xl animate-pulse opacity-15" style={{ color: "#ff4444", filter: "blur(1px)" }}>⚠</div>
               </div>
             )}
           </div>
@@ -921,6 +919,7 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
           evaluations={evaluations}
           adaptiveTriggers={adaptiveTriggerCount}
           bluffTriggers={bluffTriggerCount}
+          stressMarkers={stressMarkersRef.current}
           onClose={onEnd}
         />
       )}

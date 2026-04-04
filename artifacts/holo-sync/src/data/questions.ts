@@ -505,34 +505,34 @@ export function getFilteredQuestions(
   return selected;
 }
 
-export const EMPATHY_RESPONSES = [
-  "Hey, I can see you're a little stressed right now. That's completely okay — take a deep breath. You are doing well. Let's try that again.",
-  "Your heart rate has spiked a bit. That is perfectly normal in an interview setting. Relax your shoulders, take a sip of water if you need to, and we'll continue at your pace.",
-  "I noticed some tension there. Remember — I am here to understand you, not to judge you. Breathe, refocus, and let's try again.",
-  "It seems like you need a moment. Take it. There is no rush. Good interviewers want you to succeed.",
+export const PRESSURE_RESPONSES = [
+  "You seem uncomfortable. In a real interview, no one will stop for you. Let's continue.",
+  "I can sense hesitation. The clock is ticking. Next question.",
+  "Your composure is slipping. A real panel would have noticed that already.",
+  "Nervousness is showing. The best candidates push through it. Can you?",
 ];
 
 export const HR_SPIKE_RESPONSES = [
-  "I notice your heart rate just jumped up. Are you feeling nervous about this topic? Take a moment if you need to.",
-  "Your biometrics show a sudden increase in heart rate. That's interesting — this topic seems to be challenging for you. Let's explore why.",
-  "I can see your pulse is climbing. Is this question hitting close to home? Remember, honesty is what we value most.",
-  "Your heart rate spiked just now. Are you uncertain about your answer, or is something else on your mind?",
-  "Interesting — your heartbeat accelerated noticeably. This tells me this area might need more preparation. Let's work through it.",
-  "I'm detecting elevated cardiovascular activity. Don't worry — pressure is part of the process. Channel that energy into your response.",
+  "Your heart rate just spiked. Interesting. Are you uncertain about your answer?",
+  "I can see your pulse climbing. This topic seems to be your weak point.",
+  "Your biometrics suggest stress. A real interviewer would press harder here. So will I.",
+  "Heart rate increase detected. Let's see if you can maintain composure under pressure.",
+  "Your body is telling me something your words aren't. Let's dig deeper.",
+  "Elevated heart rate. This is exactly the kind of moment that separates strong candidates from the rest.",
 ];
 
 export const HR_DROP_RESPONSES = [
-  "Good — I can see your heart rate is settling down. You seem more comfortable now. Let's keep this momentum going.",
-  "Your pulse has calmed considerably. That's a sign of composure. You're finding your rhythm — excellent.",
-  "I notice your heart rate dropped. You seem more confident with this topic. That's showing through in your answers.",
-  "Your biometrics show you're relaxing. That's great — confident candidates give better answers. Continue.",
-  "Your cardiovascular data shows you're settling in nicely. Comfort breeds clarity — keep going.",
+  "Your heart rate has settled. Good recovery. But don't get comfortable — harder questions are coming.",
+  "Pulse normalized. You handle easy topics well. Let's see how you do under real pressure.",
+  "Composure restored. That's a useful skill. Now prove it wasn't just a lucky calm.",
+  "Heart rate stable. Good. But remember — real interviews don't give you time to recover.",
+  "You've calmed down. Noted. Let's see if that lasts.",
 ];
 
 export const HR_ELEVATED_RESPONSES = [
-  "Your heart rate has been elevated for a while now. Would you like to take a short pause before we continue?",
-  "I've been monitoring your biometrics, and your heart rate remains high. Let's slow down — take a deep breath with me.",
-  "Sustained elevated heart rate detected. This is a marathon, not a sprint. Pace yourself — we have time.",
+  "Your heart rate has been elevated for a while. In a real interview, this would be visible. Work on controlling it.",
+  "Sustained stress detected. This is exactly what happens in high-pressure interviews. Push through.",
+  "Biometrics show prolonged stress. This is where most candidates break. Will you?",
 ];
 
 export const BLUFF_RESPONSES = [
@@ -541,21 +541,21 @@ export const BLUFF_RESPONSES = [
   "I'd like to drill deeper into that. Can you explain the underlying mechanism in technical detail?",
 ];
 
-export const STRESS_COOLDOWN_TRANSITIONS = [
-  "I can see you're under some pressure. Let me ask you something a little lighter to help you settle in.",
-  "Your biometrics suggest you're feeling the heat. Let's take a step back — here's something more straightforward for you.",
-  "I notice your stress levels are elevated. A good interviewer adapts. Let me ease the difficulty for a moment.",
-  "High heart rate detected. Let's shift gears — I'll ask something simpler so you can catch your breath and refocus.",
-  "Your pulse tells me this is intense for you. No shame in that. Here's an easier one to rebuild your confidence.",
+export const STRESS_ESCALATION_RESPONSES = [
+  "You're clearly stressed. Good — real interviews are stressful. Let me push you further.",
+  "I can see the pressure is getting to you. A strong candidate would power through. Let's see what you're made of.",
+  "Your stress is showing. In a real panel, they'd smell blood. Here's a harder one.",
+  "Biometrics show you're struggling. This is where preparation matters. Prove yours.",
+  "You're breaking under pressure. That's the point — we train you to handle this. Focus.",
 ];
 
-export const CALM_ESCALATION_TRANSITIONS = [
-  "You've calmed down considerably. Good composure. But don't get too comfortable — let's see how you handle this.",
-  "Your heart rate has settled. That means you're ready for the real challenge. Here's a tough one.",
-  "I see you're relaxed now. Perfect. That means I can push you harder. Let's go.",
-  "Biometrics show you've recovered well. Time to turn up the heat. Answer this.",
-  "You seem very comfortable. Too comfortable, perhaps. Let me test your limits with something harder.",
-  "Your stress levels dropped — which means the questions weren't hard enough. Let's fix that.",
+export const CALM_ESCALATION_RESPONSES = [
+  "You're too comfortable. Real interviews don't let you cruise. Here's something harder.",
+  "Heart rate is stable. Means the questions aren't challenging enough. Let me fix that.",
+  "You seem relaxed. In a real panel, they'd escalate. So will I.",
+  "Composure is good, but don't mistake comfort for competence. Prove it with this.",
+  "Your calm tells me you're either prepared or overconfident. Let's find out which.",
+  "Stress levels dropped. Time to push your limits.",
 ];
 
 export function getAdaptiveQuestion(

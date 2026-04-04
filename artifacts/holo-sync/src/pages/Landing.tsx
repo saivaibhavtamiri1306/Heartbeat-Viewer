@@ -87,7 +87,7 @@ export default function Landing({ onStart }: LandingProps) {
                 className="text-[10px] font-mono uppercase tracking-[0.5em] mb-2"
                 style={{ color: "rgba(0, 212, 255, 0.6)" }}
               >
-                Next-Generation Biometric Intelligence
+                Biometric Pressure Training System
               </div>
               <h1
                 className="text-6xl md:text-8xl font-black gradient-text leading-none"
@@ -115,12 +115,12 @@ export default function Landing({ onStart }: LandingProps) {
             className="text-base md:text-lg max-w-2xl leading-relaxed font-light"
             style={{ color: "rgba(180, 220, 240, 0.75)" }}
           >
-            The Universal Biometric Interviewer — your webcam reads your heartbeat,
-            and our 3D AI adapts in real-time to your emotional state.
+            Train to handle real interview pressure — your webcam tracks your heartbeat,
+            and our AI maintains or increases difficulty when you're stressed. No comfort. No shortcuts.
           </p>
 
           <div className="flex gap-3 flex-wrap justify-center mt-1">
-            {["rPPG Heart Tracking", "3D Empathetic Avatar", "Cross-Fire Panel Mode", "Bluff Detector"].map(f => (
+            {["rPPG Heart Tracking", "Pressure Escalation", "Cross-Fire Panel Mode", "Stress Endurance Score"].map(f => (
               <span key={f} className="feature-badge rounded-full px-4 py-1.5 text-[10px] font-mono uppercase tracking-[0.15em] text-cyan-400/70">
                 {f}
               </span>
