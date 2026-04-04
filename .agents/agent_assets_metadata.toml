@@ -36,6 +36,24 @@ uri = "file://artifacts/holo-sync-deck/public/eye-tracking.png"
 type = "image"
 title = "generated_image"
 
+[[generated]]
+id = "K3qTDKIlUxyG-9SKyeksi"
+uri = "file://artifacts/holo-sync/public/avatar-chairman.png"
+type = "image"
+title = "3D avatar chairman portrait"
+
+[[generated]]
+id = "zXKGr6Ugbznknl9KaOyQn"
+uri = "file://artifacts/holo-sync/public/avatar-member1.png"
+type = "image"
+title = "3D avatar member 1 portrait"
+
+[[generated]]
+id = "i0Pju3yCIId8UJ0LcAA60"
+uri = "file://artifacts/holo-sync/public/avatar-member2.png"
+type = "image"
+title = "3D avatar member 2 portrait"
+
 [[outputs]]
 id = "fngbHVXfnESRQmMoZFimb"
 uri = "file://HOLO_SYNC_DOCUMENTATION.md"

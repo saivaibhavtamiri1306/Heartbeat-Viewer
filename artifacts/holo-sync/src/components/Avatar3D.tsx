@@ -1,4 +1,4 @@
-import { useRef, useMemo, Suspense, useCallback } from "react";
+import { useRef, useMemo, Suspense } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Float, Stars, useGLTF, useTexture } from "@react-three/drei";
 import * as THREE from "three";
@@ -11,10 +11,10 @@ const EMOTION_COLORS: Record<string, { primary: string; glow: string }> = {
   stressed:   { primary: "#ff00ff", glow: "#330033" },
 };
 
-const PANEL_TINTS = [
-  { skin: "#e8c4a0", sheen: "#ffaa00", label: "Chairman" },
-  { skin: "#d4a574", sheen: "#ff4444", label: "Member 1" },
-  { skin: "#c49070", sheen: "#00d4ff", label: "Member 2" },
+const AVATAR_FACES = [
+  { texture: "/avatar-chairman.png", sheen: "#ffaa00", label: "Chairman" },
+  { texture: "/avatar-member1.png", sheen: "#ff4444", label: "Member 1" },
+  { texture: "/avatar-member2.png", sheen: "#00d4ff", label: "Member 2" },
 ];
 
 useGLTF.preload("/head.glb");
@@ -87,39 +87,17 @@ function ScanLine({ color }: { color: string }) {
   );
 }
 
-function LipSyncJaw({ amplitude, color }: { amplitude: number; color: string }) {
-  const ref = useRef<THREE.Mesh>(null);
-  const smoothAmp = useRef(0);
-
-  useFrame(() => {
-    smoothAmp.current += (amplitude - smoothAmp.current) * 0.3;
-    if (ref.current) {
-      const open = smoothAmp.current * 0.12;
-      ref.current.position.y = -0.55 - open;
-      ref.current.scale.y = 0.03 + smoothAmp.current * 0.06;
-      ref.current.scale.x = 0.15 + smoothAmp.current * 0.05;
-    }
-  });
-
-  return (
-    <mesh ref={ref} position={[0, -0.55, 0.65]}>
-      <sphereGeometry args={[0.12, 16, 8]} />
-      <meshBasicMaterial color={color} transparent opacity={0.5 + amplitude * 0.4} />
-    </mesh>
-  );
-}
-
-function HeadScene({
+function HeadWithFace({
+  facePath,
   emotion,
   isSpeaking,
   getAmplitude,
-  tintColor,
   sheenColor,
 }: {
+  facePath: string;
   emotion: string;
   isSpeaking: boolean;
   getAmplitude?: () => number;
-  tintColor?: string;
   sheenColor?: string;
 }) {
   const groupRef = useRef<THREE.Group>(null);
@@ -127,11 +105,11 @@ function HeadScene({
   const jawRef = useRef<THREE.Mesh>(null);
   const smoothAmp = useRef(0);
   const { scene } = useGLTF("/head.glb");
-  const colorTex = useTexture("/head-color.jpg");
+  const faceTex = useTexture(facePath);
   const normalTex = useTexture("/head-normal.jpg");
   const emotionConfig = EMOTION_COLORS[emotion] || EMOTION_COLORS.neutral;
 
-  colorTex.colorSpace = THREE.SRGBColorSpace;
+  faceTex.colorSpace = THREE.SRGBColorSpace;
 
   const finalSheen = sheenColor || emotionConfig.primary;
   const finalGlow = emotionConfig.glow;
@@ -141,7 +119,7 @@ function HeadScene({
     clone.traverse((child) => {
       if (child instanceof THREE.Mesh) {
         child.material = new THREE.MeshPhysicalMaterial({
-          map: colorTex,
+          map: faceTex,
           normalMap: normalTex,
           normalScale: new THREE.Vector2(1.0, 1.0),
           roughness: 0.45,
@@ -154,13 +132,10 @@ function HeadScene({
           emissiveIntensity: 0.3,
           envMapIntensity: 1.0,
         });
-        if (tintColor) {
-          (child.material as THREE.MeshPhysicalMaterial).color = new THREE.Color(tintColor);
-        }
       }
     });
     return clone;
-  }, [scene, colorTex, normalTex, finalSheen, finalGlow, tintColor]);
+  }, [scene, faceTex, normalTex, finalSheen, finalGlow]);
 
   useFrame((state) => {
     const amp = getAmplitude ? getAmplitude() : 0;
@@ -235,7 +210,12 @@ function SingleScene({ emotion, isSpeaking, getAmplitude }: { emotion: string; i
       <pointLight position={[0, -2, 2]} intensity={0.3} color="#4400ff" />
 
       <Float speed={0.6} rotationIntensity={0.15} floatIntensity={0.25}>
-        <HeadScene emotion={emotion} isSpeaking={isSpeaking} getAmplitude={getAmplitude} />
+        <HeadWithFace
+          facePath={AVATAR_FACES[0].texture}
+          emotion={emotion}
+          isSpeaking={isSpeaking}
+          getAmplitude={getAmplitude}
+        />
       </Float>
 
       <HolographicRing color={emotionConfig.primary} radius={1.4} speed={0.3} />
@@ -252,19 +232,16 @@ function PanelHeadGroup({
   isActive,
   isSpeaking,
   getAmplitude,
-  tintColor,
-  sheenColor,
   xPos,
 }: {
   index: number;
   isActive: boolean;
   isSpeaking: boolean;
   getAmplitude?: () => number;
-  tintColor: string;
-  sheenColor: string;
   xPos: number;
 }) {
   const groupRef = useRef<THREE.Group>(null);
+  const avatar = AVATAR_FACES[index];
   const targetScale = isActive && isSpeaking ? 0.65 : 0.5;
   const currentScale = useRef(0.5);
 
@@ -278,16 +255,16 @@ function PanelHeadGroup({
   return (
     <group ref={groupRef} position={[xPos, 0, 0]}>
       <Float speed={0.4} rotationIntensity={0.08} floatIntensity={0.12}>
-        <HeadScene
+        <HeadWithFace
+          facePath={avatar.texture}
           emotion={isActive ? "stern" : "neutral"}
           isSpeaking={isActive && isSpeaking}
           getAmplitude={isActive ? getAmplitude : undefined}
-          tintColor={tintColor}
-          sheenColor={sheenColor}
+          sheenColor={avatar.sheen}
         />
       </Float>
-      <HolographicRing color={sheenColor} radius={1.3} speed={0.15 * (index + 1)} />
-      <pointLight position={[0, 0, 2]} color={sheenColor} intensity={isActive && isSpeaking ? 2 : 0.3} distance={5} />
+      <HolographicRing color={avatar.sheen} radius={1.3} speed={0.15 * (index + 1)} />
+      <pointLight position={[0, 0, 2]} color={avatar.sheen} intensity={isActive && isSpeaking ? 2 : 0.3} distance={5} />
     </group>
   );
 }
@@ -299,12 +276,9 @@ function PanelScene({ isSpeaking, activeSpeakerIndex, getAmplitude }: { isSpeaki
       <ambientLight intensity={0.5} />
       <directionalLight position={[3, 3, 3]} intensity={0.6} />
 
-      <PanelHeadGroup index={0} isActive={activeSpeakerIndex === 0} isSpeaking={isSpeaking} getAmplitude={getAmplitude}
-        tintColor={PANEL_TINTS[0].skin} sheenColor={PANEL_TINTS[0].sheen} xPos={-2.2} />
-      <PanelHeadGroup index={1} isActive={activeSpeakerIndex === 1} isSpeaking={isSpeaking} getAmplitude={getAmplitude}
-        tintColor={PANEL_TINTS[1].skin} sheenColor={PANEL_TINTS[1].sheen} xPos={0} />
-      <PanelHeadGroup index={2} isActive={activeSpeakerIndex === 2} isSpeaking={isSpeaking} getAmplitude={getAmplitude}
-        tintColor={PANEL_TINTS[2].skin} sheenColor={PANEL_TINTS[2].sheen} xPos={2.2} />
+      <PanelHeadGroup index={0} isActive={activeSpeakerIndex === 0} isSpeaking={isSpeaking} getAmplitude={getAmplitude} xPos={-2.2} />
+      <PanelHeadGroup index={1} isActive={activeSpeakerIndex === 1} isSpeaking={isSpeaking} getAmplitude={getAmplitude} xPos={0} />
+      <PanelHeadGroup index={2} isActive={activeSpeakerIndex === 2} isSpeaking={isSpeaking} getAmplitude={getAmplitude} xPos={2.2} />
 
       <FloatingParticles color="#00d4ff" count={120} />
       <Stars radius={40} depth={50} count={400} factor={3} saturation={0} fade speed={0.3} />
@@ -401,18 +375,18 @@ export default function Avatar3D({
 
         {panelMode && (
           <div className="absolute bottom-2 left-0 right-0 flex justify-around pointer-events-none px-4">
-            {PANEL_TINTS.map((t, i) => (
+            {AVATAR_FACES.map((a, i) => (
               <div
                 key={i}
                 className="text-[9px] font-mono uppercase tracking-widest px-2 py-1 rounded-full"
                 style={{
-                  color: t.sheen,
-                  border: `1px solid ${t.sheen}${activeSpeakerIndex === i ? "90" : "30"}`,
-                  background: activeSpeakerIndex === i ? `${t.sheen}20` : "transparent",
-                  boxShadow: activeSpeakerIndex === i ? `0 0 10px ${t.sheen}40` : "none",
+                  color: a.sheen,
+                  border: `1px solid ${a.sheen}${activeSpeakerIndex === i ? "90" : "30"}`,
+                  background: activeSpeakerIndex === i ? `${a.sheen}20` : "transparent",
+                  boxShadow: activeSpeakerIndex === i ? `0 0 10px ${a.sheen}40` : "none",
                 }}
               >
-                {t.label}
+                {a.label}
               </div>
             ))}
           </div>
