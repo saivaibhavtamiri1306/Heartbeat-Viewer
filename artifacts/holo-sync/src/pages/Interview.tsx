@@ -69,6 +69,7 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
   const [answerCount, setAnswerCount] = useState(0);
   const [activeSpeakerIndex, setActiveSpeakerIndex] = useState(0);
   const [spokenText, setSpokenText] = useState("");
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const speechRunIdRef = useRef(0);
   const bpmHistoryRef = useRef<number[]>([]);
   const lastHrCommentRef = useRef(0);
@@ -172,17 +173,20 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
       voice: selectedVoice,
       onStart: () => {
         if (runId !== speechRunIdRef.current) return;
+        setAudioBlob(tts.getLastBlob());
       },
       onEnd: () => {
         if (runId !== speechRunIdRef.current) return;
         setIsSpeaking(false);
         setSpokenText("");
+        setAudioBlob(null);
         if (micOn) { clearCurrentAnswer(); startListening(); }
       },
       onError: () => {
         if (runId !== speechRunIdRef.current) return;
         setIsSpeaking(false);
         setSpokenText("");
+        setAudioBlob(null);
         if (micOn) { clearCurrentAnswer(); startListening(); }
       },
     });
@@ -190,6 +194,7 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
     if (runId === speechRunIdRef.current) {
       setIsSpeaking(false);
       setSpokenText("");
+      setAudioBlob(null);
     }
   }, [addMessage, micOn, startListening, stopListening, clearCurrentAnswer, tts]);
 
@@ -693,6 +698,7 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
               activeSpeakerIndex={activeSpeakerIndex}
               getAmplitude={tts.getAmplitude}
               spokenText={spokenText}
+              audioBlob={audioBlob}
             />
 
             <div className="absolute top-3 left-3 flex flex-col gap-1 pointer-events-none">

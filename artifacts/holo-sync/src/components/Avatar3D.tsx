@@ -35,18 +35,22 @@ function loadTalkingHead(): Promise<any> {
   return thLoadPromise;
 }
 
-const VISEME_KEYS = [
-  "viseme_aa", "viseme_O", "viseme_E", "viseme_I", "viseme_U",
-  "viseme_PP", "viseme_FF", "viseme_TH", "viseme_DD", "viseme_SS", "viseme_CH",
-];
-
-const VISEME_GROUPS = [
-  ["viseme_aa", "viseme_O"],
-  ["viseme_E", "viseme_I"],
-  ["viseme_U", "viseme_PP"],
-  ["viseme_FF", "viseme_TH"],
-  ["viseme_DD", "viseme_SS"],
-];
+function generateWordTimings(text: string, durationMs: number) {
+  const words = text.split(/\s+/).filter(w => w.length > 0);
+  if (words.length === 0) return { words: [], wtimes: [], wdurations: [] };
+  const totalChars = words.reduce((s, w) => s + w.length, 0);
+  const wtimes: number[] = [];
+  const wdurations: number[] = [];
+  let t = 50;
+  for (const w of words) {
+    const fraction = w.length / totalChars;
+    const dur = fraction * (durationMs - 100);
+    wtimes.push(t);
+    wdurations.push(dur);
+    t += dur;
+  }
+  return { words, wtimes, wdurations };
+}
 
 function TalkingHeadAvatar({
   avatarIndex,
@@ -57,6 +61,8 @@ function TalkingHeadAvatar({
   isActive = true,
   label,
   emotion,
+  spokenText,
+  audioBlob,
 }: {
   avatarIndex: number;
   isSpeaking: boolean;
@@ -66,6 +72,8 @@ function TalkingHeadAvatar({
   isActive?: boolean;
   label?: string;
   emotion?: string;
+  spokenText?: string;
+  audioBlob?: Blob | null;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const headRef = useRef<any>(null);
@@ -97,6 +105,7 @@ function TalkingHeadAvatar({
           cameraRotateY: 0,
           avatarMood: "neutral",
           avatarIdleEyeContact: 0.7,
+          mixerGainSpeech: 0.001,
           statsNode: null,
         });
 
@@ -147,82 +156,36 @@ function TalkingHeadAvatar({
     const head = headRef.current;
     if (!head) return;
 
-    cancelAnimationFrame(animRef.current);
+    if (isSpeaking && isActive && spokenText && audioBlob) {
+      let cancelled = false;
+      (async () => {
+        try {
+          try { head.stopSpeaking(); } catch {}
 
-    const setFixed = (key: string, val: number | null) => {
-      const mt = head.mtAvatar?.[key];
-      if (mt) {
-        mt.fixed = val;
-        mt.needsUpdate = true;
-      }
-    };
+          const arrayBuf = await audioBlob.arrayBuffer();
+          if (cancelled) return;
+          const actx = new AudioContext();
+          const audioBuffer = await actx.decodeAudioData(arrayBuf);
+          actx.close();
+          if (cancelled) return;
 
-    const clearAllFixed = () => {
-      setFixed("jawOpen", null);
-      for (const vk of VISEME_KEYS) {
-        setFixed(vk, null);
-      }
-    };
+          const durationMs = audioBuffer.duration * 1000;
+          const { words, wtimes, wdurations } = generateWordTimings(spokenText, durationMs);
 
-    if (isSpeaking && isActive && getAmplitude) {
-      let prevAmp = 0;
-      let groupIdx = 0;
-      let switchTimer = 0;
-      let lastTime = performance.now();
-
-      const pump = () => {
-        const now = performance.now();
-        const dt = now - lastTime;
-        lastTime = now;
-
-        const rawAmp = getAmplitude?.() || 0;
-        const amp = prevAmp * 0.4 + rawAmp * 0.6;
-        prevAmp = amp;
-
-        if (head.mtAvatar) {
-          const jawVal = amp > 0.03 ? Math.min(amp * 0.85, 0.75) : 0;
-          setFixed("jawOpen", jawVal);
-
-          switchTimer += dt;
-          if (switchTimer > 80 + Math.random() * 60) {
-            switchTimer = 0;
-            if (amp > 0.05) {
-              groupIdx = (groupIdx + 1) % VISEME_GROUPS.length;
-            }
-          }
-
-          const activeGroup = VISEME_GROUPS[groupIdx];
-          for (const vk of VISEME_KEYS) {
-            if (amp < 0.03) {
-              setFixed(vk, 0);
-            } else if (activeGroup.includes(vk)) {
-              setFixed(vk, amp * 0.55);
-            } else {
-              setFixed(vk, 0);
-            }
-          }
+          head.speakAudio(
+            { audio: audioBuffer, words, wtimes, wdurations },
+            { lipsyncLang: "en", avatarMood: MOOD_MAP[emotion || "neutral"] || "neutral" }
+          );
+        } catch (err) {
+          console.error("[TalkingHead] speakAudio error:", err);
         }
+      })();
 
-        animRef.current = requestAnimationFrame(pump);
-      };
-      pump();
-    } else {
-      clearAllFixed();
+      return () => { cancelled = true; };
+    } else if (!isSpeaking && head) {
+      try { head.stopSpeaking(); } catch {}
     }
-
-    return () => {
-      cancelAnimationFrame(animRef.current);
-      if (headRef.current?.mtAvatar) {
-        const h = headRef.current;
-        const sf = (key: string) => {
-          const mt = h.mtAvatar?.[key];
-          if (mt) { mt.fixed = null; mt.needsUpdate = true; }
-        };
-        sf("jawOpen");
-        for (const vk of VISEME_KEYS) sf(vk);
-      }
-    };
-  }, [isSpeaking, isActive, getAmplitude]);
+  }, [isSpeaking, isActive, spokenText, audioBlob, emotion]);
 
   return (
     <div className="flex flex-col items-center gap-2">
@@ -301,6 +264,7 @@ interface Avatar3DProps {
   mouthOpenness?: number;
   spokenText?: string;
   getAmplitude?: () => number;
+  audioBlob?: Blob | null;
 }
 
 export default function Avatar3D({
@@ -310,6 +274,8 @@ export default function Avatar3D({
   panelMode,
   activeSpeakerIndex = 0,
   getAmplitude,
+  spokenText,
+  audioBlob,
 }: Avatar3DProps) {
   const ec = EMOTION_COLORS[emotion] || "#00d4ff";
 
@@ -332,6 +298,8 @@ export default function Avatar3D({
                 isActive={active}
                 label={labels[i]}
                 emotion={emotion}
+                spokenText={active ? spokenText : undefined}
+                audioBlob={active ? audioBlob : undefined}
               />
             );
           })}
@@ -360,6 +328,8 @@ export default function Avatar3D({
         color={ec}
         size={240}
         emotion={emotion}
+        spokenText={spokenText}
+        audioBlob={audioBlob}
       />
       <div className="text-xs font-mono tracking-widest flex items-center gap-2" style={{ color: ec }}>
         <span className="inline-block w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: ec }} />

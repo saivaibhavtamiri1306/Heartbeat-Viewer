@@ -43,6 +43,7 @@ export function useTTS() {
     }
     cancelAnimationFrame(animFrameRef.current);
     amplitudeRef.current = 0;
+    lastBlobRef.current = null;
 
     const controller = new AbortController();
     abortRef.current = controller;
