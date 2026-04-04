@@ -7,8 +7,8 @@ interface LandingProps {
 }
 
 export default function Landing({ onStart }: LandingProps) {
+  const [selected, setSelected] = useState<Domain | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
-
 
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center relative overflow-hidden grid-bg">
@@ -62,7 +62,6 @@ export default function Landing({ onStart }: LandingProps) {
             <span className="border border-cyan-500/20 rounded px-2 py-1">Cross-Fire Panel Mode</span>
             <span className="border border-cyan-500/20 rounded px-2 py-1">Bluff Detector</span>
           </div>
-
         </div>
 
         <div className="w-full">
@@ -73,15 +72,28 @@ export default function Landing({ onStart }: LandingProps) {
             {DOMAINS.map((domain) => (
               <button
                 key={domain.id}
-                onClick={() => onStart(domain)}
+                onClick={() => setSelected(domain)}
                 onMouseEnter={() => setHovered(domain.id)}
                 onMouseLeave={() => setHovered(null)}
                 className={`relative text-left p-4 rounded-xl border transition-all duration-300 cursor-pointer overflow-hidden group ${
-                  hovered === domain.id
+                  selected?.id === domain.id
+                    ? "border-cyan-400 bg-cyan-500/15"
+                    : hovered === domain.id
                     ? "border-cyan-500/50 bg-cyan-500/5"
                     : "border-gray-700/60 bg-gray-900/40"
                 }`}
+                style={{
+                  boxShadow: selected?.id === domain.id
+                    ? `0 0 20px ${domain.color}44`
+                    : "none",
+                }}
               >
+                {selected?.id === domain.id && (
+                  <div
+                    className="absolute top-0 left-0 right-0 h-0.5"
+                    style={{ background: domain.color }}
+                  />
+                )}
                 <div className="flex items-start gap-3">
                   <span className="text-2xl">{domain.icon}</span>
                   <div className="flex flex-col gap-1">
@@ -100,10 +112,34 @@ export default function Landing({ onStart }: LandingProps) {
           </div>
         </div>
 
-        <div className="flex flex-col items-center gap-2 w-full max-w-sm">
-          <p className="text-xs text-gray-500 text-center font-mono">
-            Click a domain to configure your interview
-          </p>
+        <div className="flex flex-col items-center gap-4 w-full max-w-sm">
+          {selected && (
+            <div className="text-sm text-cyan-300/80 text-center font-mono">
+              Selected: <span className="font-bold" style={{ color: selected.color }}>{selected.label}</span>
+              {selected.panelMode && <div className="text-xs text-yellow-400/70 mt-1">⚠ Panel mode — 3 interviewers will cross-examine you simultaneously</div>}
+            </div>
+          )}
+
+          <button
+            onClick={() => selected && onStart(selected)}
+            disabled={!selected}
+            className="relative w-full py-4 rounded-xl font-black text-lg uppercase tracking-widest transition-all duration-300 overflow-hidden group"
+            style={{
+              background: selected
+                ? "linear-gradient(135deg, rgba(0,212,255,0.2), rgba(119,0,255,0.2))"
+                : "rgba(50,50,50,0.3)",
+              border: selected ? "2px solid rgba(0,212,255,0.6)" : "2px solid rgba(80,80,80,0.3)",
+              color: selected ? "#00d4ff" : "#555",
+              boxShadow: selected ? "0 0 30px rgba(0,212,255,0.2)" : "none",
+              cursor: selected ? "pointer" : "not-allowed",
+            }}
+          >
+            {selected && (
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-cyan-500/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+            )}
+            {selected ? `⚡ Initialize ${selected.label} Interview` : "Select a Domain Above"}
+          </button>
+
           <p className="text-xs text-gray-600 text-center font-mono">
             Camera access required for biometric heart tracking
           </p>
