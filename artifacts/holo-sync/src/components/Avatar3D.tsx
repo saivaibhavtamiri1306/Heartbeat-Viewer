@@ -18,6 +18,52 @@ const EMOTION_COLORS: Record<string, string> = {
   stressed: "#ff00ff",
 };
 
+function faceDepth(u: number, v: number): number {
+  const cx = 0.5, cy = 0.42;
+  const dx = (u - cx) * 2;
+  const dy = (v - cy) * 2.2;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  const base = Math.max(0, 1 - dist * 0.9);
+  const faceShape = base * base * 0.45;
+
+  const noseDx = (u - 0.5) * 6;
+  const noseDy = (v - 0.45) * 4;
+  const noseDist = Math.sqrt(noseDx * noseDx + noseDy * noseDy);
+  const nose = Math.max(0, 1 - noseDist) * 0.2;
+
+  const browRidge = Math.max(0, 1 - Math.abs(v - 0.32) * 8) *
+    Math.max(0, 1 - Math.abs(u - 0.5) * 3.5) * 0.08;
+
+  const cheekL = Math.max(0, 1 - Math.sqrt(((u - 0.3) * 4) ** 2 + ((v - 0.52) * 5) ** 2)) * 0.1;
+  const cheekR = Math.max(0, 1 - Math.sqrt(((u - 0.7) * 4) ** 2 + ((v - 0.52) * 5) ** 2)) * 0.1;
+
+  const eyeSocketL = Math.max(0, 1 - Math.sqrt(((u - 0.37) * 7) ** 2 + ((v - 0.38) * 9) ** 2)) * -0.06;
+  const eyeSocketR = Math.max(0, 1 - Math.sqrt(((u - 0.63) * 7) ** 2 + ((v - 0.38) * 9) ** 2)) * -0.06;
+
+  const chin = Math.max(0, 1 - Math.sqrt(((u - 0.5) * 4) ** 2 + ((v - 0.72) * 4) ** 2)) * 0.12;
+
+  const temple = Math.max(0, 1 - dist * 1.1) * 0.05;
+
+  return faceShape + nose + browRidge + cheekL + cheekR + eyeSocketL + eyeSocketR + chin + temple;
+}
+
+function createFaceGeometry(segments: number) {
+  const geo = new THREE.PlaneGeometry(2, 2.4, segments, segments);
+  const pos = geo.attributes.position;
+  const uv = geo.attributes.uv;
+
+  for (let i = 0; i < pos.count; i++) {
+    const u = uv.getX(i);
+    const v = 1 - uv.getY(i);
+    const depth = faceDepth(u, v);
+    pos.setZ(i, depth);
+  }
+
+  pos.needsUpdate = true;
+  geo.computeVertexNormals();
+  return geo;
+}
+
 function ThreeImageAvatar({
   src,
   isSpeaking,
@@ -36,14 +82,7 @@ function ThreeImageAvatar({
   label?: string;
 }) {
   const mountRef = useRef<HTMLDivElement>(null);
-  const stateRef = useRef<{
-    renderer: THREE.WebGLRenderer;
-    scene: THREE.Scene;
-    camera: THREE.PerspectiveCamera;
-    mesh: THREE.Mesh;
-    origPositions: Float32Array;
-    frameId: number;
-  } | null>(null);
+  const stateRef = useRef<{ frameId: number; renderer: THREE.WebGLRenderer } | null>(null);
   const propsRef = useRef({ isSpeaking, getAmplitude, isActive });
   propsRef.current = { isSpeaking, getAmplitude, isActive };
 
@@ -52,118 +91,117 @@ function ThreeImageAvatar({
     if (!mount) return;
 
     const px = size * 2;
-
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(px, px);
     renderer.setPixelRatio(1);
     renderer.setClearColor(0x000000, 0);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.2;
+    renderer.toneMappingExposure = 1.3;
     mount.appendChild(renderer.domElement);
-    renderer.domElement.style.width = size + "px";
-    renderer.domElement.style.height = size + "px";
-    renderer.domElement.style.borderRadius = "50%";
-    renderer.domElement.style.display = "block";
+    Object.assign(renderer.domElement.style, {
+      width: size + "px",
+      height: size + "px",
+      borderRadius: "50%",
+      display: "block",
+    });
 
     const scene = new THREE.Scene();
-
-    const camera = new THREE.PerspectiveCamera(28, 1, 0.1, 100);
-    camera.position.set(0, 0, 4.2);
+    const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
+    camera.position.set(0, 0.05, 3.8);
     camera.lookAt(0, 0, 0);
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-    const key = new THREE.DirectionalLight(0xfff8f0, 1.0);
-    key.position.set(2, 2, 4);
-    scene.add(key);
-    const fill = new THREE.DirectionalLight(0xccddff, 0.3);
-    fill.position.set(-2, 0, 3);
-    scene.add(fill);
-    const rim = new THREE.PointLight(new THREE.Color(color).getHex(), 0.6, 10);
-    rim.position.set(0, 0, -2);
-    scene.add(rim);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+    const keyLight = new THREE.DirectionalLight(0xfff5e8, 1.1);
+    keyLight.position.set(3, 3, 5);
+    scene.add(keyLight);
+    const fillLight = new THREE.DirectionalLight(0xaaccff, 0.35);
+    fillLight.position.set(-3, 1, 4);
+    scene.add(fillLight);
+    const rimLight = new THREE.PointLight(new THREE.Color(color).getHex(), 0.7, 12);
+    rimLight.position.set(0, 1, -3);
+    scene.add(rimLight);
+    const bottomLight = new THREE.DirectionalLight(0x334455, 0.2);
+    bottomLight.position.set(0, -3, 2);
+    scene.add(bottomLight);
 
-    const seg = 50;
-    const geo = new THREE.PlaneGeometry(2.2, 2.6, seg, seg);
-    const posAttr = geo.attributes.position;
-    for (let i = 0; i < posAttr.count; i++) {
-      const x = posAttr.getX(i);
-      const y = posAttr.getY(i);
-      const r = Math.sqrt(x * x + (y * 0.85) * (y * 0.85));
-      const bulge = Math.max(0, 1 - r * 0.75);
-      posAttr.setZ(i, bulge * bulge * 0.55);
-    }
-    posAttr.needsUpdate = true;
-    geo.computeVertexNormals();
-
-    const origPositions = new Float32Array(posAttr.array);
+    const seg = 80;
+    const geo = createFaceGeometry(seg);
+    const origPos = new Float32Array(geo.attributes.position.array);
+    const uvAttr = geo.attributes.uv;
 
     const loader = new THREE.TextureLoader();
     loader.load(src, (texture) => {
       texture.colorSpace = THREE.SRGBColorSpace;
+      texture.minFilter = THREE.LinearMipmapLinearFilter;
+      texture.magFilter = THREE.LinearFilter;
+      texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
 
       const mat = new THREE.MeshStandardMaterial({
         map: texture,
-        roughness: 0.5,
-        metalness: 0.05,
+        roughness: 0.55,
+        metalness: 0.02,
+        side: THREE.FrontSide,
       });
       const mesh = new THREE.Mesh(geo, mat);
       scene.add(mesh);
 
       let smoothAmp = 0;
       let t = Math.random() * 100;
+      const posAttr = geo.attributes.position;
 
       const animate = () => {
-        const frameId = requestAnimationFrame(animate);
-        if (stateRef.current) stateRef.current.frameId = frameId;
+        const fid = requestAnimationFrame(animate);
+        if (stateRef.current) stateRef.current.frameId = fid;
 
         t += 0.016;
-        const props = propsRef.current;
-
-        const rawAmp = (props.isSpeaking && props.isActive && props.getAmplitude)
-          ? props.getAmplitude() : 0;
+        const p = propsRef.current;
+        const rawAmp = (p.isSpeaking && p.isActive && p.getAmplitude) ? p.getAmplitude() : 0;
         smoothAmp += (rawAmp - smoothAmp) * 0.3;
 
-        const idleY = Math.sin(t * 0.45) * 0.1;
-        const idleX = Math.sin(t * 0.32) * 0.04;
-        const speakY = props.isSpeaking && props.isActive ? Math.sin(t * 1.8) * smoothAmp * 0.08 : 0;
-        const speakX = props.isSpeaking && props.isActive ? Math.sin(t * 2.5) * smoothAmp * 0.04 : 0;
-        const nod = props.isSpeaking && props.isActive ? Math.sin(t * 3.0) * smoothAmp * 0.03 : 0;
+        const idleY = Math.sin(t * 0.4) * 0.15;
+        const idleX = Math.sin(t * 0.28) * 0.06;
+        const speakY = p.isSpeaking && p.isActive ? Math.sin(t * 1.6) * smoothAmp * 0.1 : 0;
+        const speakX = p.isSpeaking && p.isActive ? Math.sin(t * 2.2) * smoothAmp * 0.06 : 0;
+        const nod = p.isSpeaking && p.isActive ? Math.sin(t * 3.5) * smoothAmp * 0.04 : 0;
 
         mesh.rotation.y = idleY + speakY;
         mesh.rotation.x = idleX + speakX + nod;
-        mesh.rotation.z = Math.sin(t * 0.2) * 0.012;
-        mesh.position.y = Math.sin(t * 0.8) * 0.006;
+        mesh.rotation.z = Math.sin(t * 0.18) * 0.015;
+        mesh.position.y = Math.sin(t * 0.7) * 0.008;
 
         const arr = posAttr.array as Float32Array;
         for (let i = 0; i < posAttr.count; i++) {
-          const ox = origPositions[i * 3];
-          const oy = origPositions[i * 3 + 1];
-          const oz = origPositions[i * 3 + 2];
+          const oy = origPos[i * 3 + 1];
+          const oz = origPos[i * 3 + 2];
+          const u = uvAttr.getX(i);
+          const v = 1 - uvAttr.getY(i);
 
-          let dy = 0;
-          let dz = 0;
+          let dy = 0, dz = 0;
 
-          if (props.isSpeaking && props.isActive && smoothAmp > 0.01) {
-            const mx = ox / 0.32;
-            const my = (oy - (-0.55)) / 0.18;
-            const md = mx * mx + my * my;
+          if (p.isSpeaking && p.isActive && smoothAmp > 0.01) {
+            const mouthU = 0.5, mouthV = 0.68;
+            const mdx = (u - mouthU) / 0.12;
+            const mdy = (v - mouthV) / 0.06;
+            const md = mdx * mdx + mdy * mdy;
 
             if (md < 1) {
-              const inf = (1 - md) * (1 - md);
-              if (oy < -0.55) {
-                dy = -inf * smoothAmp * 0.22;
-                dz = -inf * smoothAmp * 0.05;
+              const inf = (1 - md);
+              const infSq = inf * inf;
+              if (v > mouthV) {
+                dy -= infSq * smoothAmp * 0.25;
+                dz -= infSq * smoothAmp * 0.08;
               } else {
-                dy = inf * smoothAmp * 0.05;
+                dy += infSq * smoothAmp * 0.06;
+                dz += infSq * smoothAmp * 0.03;
               }
             }
 
-            const jx = ox / 0.45;
-            const jy = (oy - (-0.8)) / 0.3;
-            const jd = jx * jx + jy * jy;
+            const jawU = 0.5, jawV = 0.78;
+            const jdx = (u - jawU) / 0.2;
+            const jdy = (v - jawV) / 0.12;
+            const jd = jdx * jdx + jdy * jdy;
             if (jd < 1) {
-              const jinf = (1 - jd) * (1 - jd);
-              dy -= jinf * smoothAmp * 0.1;
+              dy -= (1 - jd) * smoothAmp * 0.12;
             }
           }
 
@@ -173,29 +211,21 @@ function ThreeImageAvatar({
         posAttr.needsUpdate = true;
         geo.computeVertexNormals();
 
-        if (!props.isActive) {
-          mesh.scale.setScalar(0.92);
-        } else {
-          mesh.scale.setScalar(1);
-        }
+        mesh.scale.setScalar(p.isActive ? 1 : 0.9);
 
         renderer.render(scene, camera);
       };
 
-      const frameId = requestAnimationFrame(animate);
-      stateRef.current = { renderer, scene, camera, mesh, origPositions, frameId };
+      const fid = requestAnimationFrame(animate);
+      stateRef.current = { frameId: fid, renderer };
     });
 
     return () => {
-      if (stateRef.current) {
-        cancelAnimationFrame(stateRef.current.frameId);
-        stateRef.current = null;
-      }
+      if (stateRef.current) cancelAnimationFrame(stateRef.current.frameId);
+      stateRef.current = null;
       renderer.dispose();
       geo.dispose();
-      if (mount.contains(renderer.domElement)) {
-        mount.removeChild(renderer.domElement);
-      }
+      if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement);
     };
   }, [src, size, color]);
 
@@ -294,15 +324,13 @@ export default function Avatar3D({
       >
         {emotion.toUpperCase()}
       </div>
-
       <ThreeImageAvatar
         src={avatarMember1}
         isSpeaking={isSpeaking}
         getAmplitude={getAmplitude}
         color={ec}
-        size={180}
+        size={200}
       />
-
       <div
         className="text-xs font-mono tracking-widest flex items-center gap-2"
         style={{ color: ec }}
