@@ -35,9 +35,17 @@ function loadTalkingHead(): Promise<any> {
   return thLoadPromise;
 }
 
-const VISEME_CYCLE = [
+const VISEME_KEYS = [
   "viseme_aa", "viseme_O", "viseme_E", "viseme_I", "viseme_U",
-  "viseme_PP", "viseme_FF", "viseme_TH", "viseme_DD",
+  "viseme_PP", "viseme_FF", "viseme_TH", "viseme_DD", "viseme_SS", "viseme_CH",
+];
+
+const VISEME_GROUPS = [
+  ["viseme_aa", "viseme_O"],
+  ["viseme_E", "viseme_I"],
+  ["viseme_U", "viseme_PP"],
+  ["viseme_FF", "viseme_TH"],
+  ["viseme_DD", "viseme_SS"],
 ];
 
 function TalkingHeadAvatar({
@@ -141,31 +149,56 @@ function TalkingHeadAvatar({
 
     cancelAnimationFrame(animRef.current);
 
+    const setFixed = (key: string, val: number | null) => {
+      const mt = head.mtAvatar?.[key];
+      if (mt) {
+        mt.fixed = val;
+        mt.needsUpdate = true;
+      }
+    };
+
+    const clearAllFixed = () => {
+      setFixed("jawOpen", null);
+      for (const vk of VISEME_KEYS) {
+        setFixed(vk, null);
+      }
+    };
+
     if (isSpeaking && isActive && getAmplitude) {
-      let frameCount = 0;
+      let prevAmp = 0;
+      let groupIdx = 0;
+      let switchTimer = 0;
+      let lastTime = performance.now();
 
       const pump = () => {
-        const amp = getAmplitude?.() || 0;
-        frameCount++;
+        const now = performance.now();
+        const dt = now - lastTime;
+        lastTime = now;
+
+        const rawAmp = getAmplitude?.() || 0;
+        const amp = prevAmp * 0.4 + rawAmp * 0.6;
+        prevAmp = amp;
 
         if (head.mtAvatar) {
-          const jawOpen = head.mtAvatar["jawOpen"];
-          if (jawOpen) {
-            jawOpen.value = amp * 0.7;
-            jawOpen.needsUpdate = true;
+          const jawVal = amp > 0.03 ? Math.min(amp * 0.85, 0.75) : 0;
+          setFixed("jawOpen", jawVal);
+
+          switchTimer += dt;
+          if (switchTimer > 80 + Math.random() * 60) {
+            switchTimer = 0;
+            if (amp > 0.05) {
+              groupIdx = (groupIdx + 1) % VISEME_GROUPS.length;
+            }
           }
 
-          const vi = Math.floor(frameCount / 4) % VISEME_CYCLE.length;
-          for (let i = 0; i < VISEME_CYCLE.length; i++) {
-            const vk = VISEME_CYCLE[i];
-            const mt = head.mtAvatar[vk];
-            if (mt) {
-              if (i === vi && amp > 0.05) {
-                mt.value = amp * 0.5;
-              } else {
-                mt.value = mt.baseline || 0;
-              }
-              mt.needsUpdate = true;
+          const activeGroup = VISEME_GROUPS[groupIdx];
+          for (const vk of VISEME_KEYS) {
+            if (amp < 0.03) {
+              setFixed(vk, 0);
+            } else if (activeGroup.includes(vk)) {
+              setFixed(vk, amp * 0.55);
+            } else {
+              setFixed(vk, 0);
             }
           }
         }
@@ -174,23 +207,21 @@ function TalkingHeadAvatar({
       };
       pump();
     } else {
-      if (head.mtAvatar) {
-        const jawOpen = head.mtAvatar["jawOpen"];
-        if (jawOpen) {
-          jawOpen.value = jawOpen.baseline || 0;
-          jawOpen.needsUpdate = true;
-        }
-        for (const vk of VISEME_CYCLE) {
-          const mt = head.mtAvatar[vk];
-          if (mt) {
-            mt.value = mt.baseline || 0;
-            mt.needsUpdate = true;
-          }
-        }
-      }
+      clearAllFixed();
     }
 
-    return () => cancelAnimationFrame(animRef.current);
+    return () => {
+      cancelAnimationFrame(animRef.current);
+      if (headRef.current?.mtAvatar) {
+        const h = headRef.current;
+        const sf = (key: string) => {
+          const mt = h.mtAvatar?.[key];
+          if (mt) { mt.fixed = null; mt.needsUpdate = true; }
+        };
+        sf("jawOpen");
+        for (const vk of VISEME_KEYS) sf(vk);
+      }
+    };
   }, [isSpeaking, isActive, getAmplitude]);
 
   return (
