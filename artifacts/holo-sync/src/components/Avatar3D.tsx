@@ -1,163 +1,11 @@
-import { useRef, useMemo, Suspense } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
-import { Float, Stars, useGLTF, Environment, useTexture } from "@react-three/drei";
-import * as THREE from "three";
-
-interface AvatarProps {
-  emotion: "neutral" | "empathetic" | "stern" | "curious" | "stressed";
-  isSpeaking: boolean;
-  bpm: number;
-  name?: string;
-  index?: number;
-  isActive?: boolean;
-  mouthOpenness?: number;
-}
-
-const EMOTION_COLORS: Record<string, { primary: number; secondary: number; emissive: number; label: string }> = {
-  neutral:    { primary: 0x00d4ff, secondary: 0x0077ff, emissive: 0x001133, label: "#00d4ff" },
-  empathetic: { primary: 0x00ff88, secondary: 0x00cc66, emissive: 0x001122, label: "#00ff88" },
-  stern:      { primary: 0xff3333, secondary: 0xcc1111, emissive: 0x220000, label: "#ff3333" },
-  curious:    { primary: 0xffaa00, secondary: 0xff6600, emissive: 0x221100, label: "#ffaa00" },
-  stressed:   { primary: 0xff00ff, secondary: 0xcc00cc, emissive: 0x220022, label: "#ff00ff" },
-};
-
-const HEAD_MODEL_URL = "/head.glb";
-
-function AmbientParticles({ color, count = 300 }: { color: number; count?: number }) {
-  const ref = useRef<THREE.Points>(null);
-  const positions = useMemo(() => {
-    const arr = new Float32Array(count * 3);
-    for (let i = 0; i < count; i++) {
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.acos(2 * Math.random() - 1);
-      const r = 2.5 + Math.random() * 3;
-      arr[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-      arr[i * 3 + 1] = r * Math.cos(phi);
-      arr[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
-    }
-    return arr;
-  }, [count]);
-
-  useFrame((s) => {
-    if (ref.current) {
-      ref.current.rotation.y = s.clock.elapsedTime * 0.015;
-    }
-  });
-
-  return (
-    <points ref={ref}>
-      <bufferGeometry>
-        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
-      </bufferGeometry>
-      <pointsMaterial size={0.008} color={color} transparent opacity={0.15} sizeAttenuation depthWrite={false} blending={THREE.AdditiveBlending} />
-    </points>
-  );
-}
-
-function HeadAvatar({ emotion, isSpeaking, bpm, index = 0, isActive = true }: AvatarProps) {
-  const groupRef = useRef<THREE.Group>(null);
-  const glowRef = useRef<THREE.Mesh>(null);
-  const { scene } = useGLTF(HEAD_MODEL_URL);
-  const [colorMap, normalMap] = useTexture(["/head-color.jpg", "/head-normal.jpg"]);
-  const colors = EMOTION_COLORS[emotion];
-  const offset = index * (Math.PI * 2 / 3);
-
-  const model = useMemo(() => {
-    colorMap.colorSpace = THREE.SRGBColorSpace;
-    colorMap.flipY = false;
-    normalMap.flipY = false;
-
-    const clone = scene.clone(true);
-    clone.traverse((child) => {
-      if ((child as THREE.Mesh).isMesh) {
-        const mesh = child as THREE.Mesh;
-        const mat = new THREE.MeshPhysicalMaterial({
-          map: colorMap,
-          normalMap: normalMap,
-          normalScale: new THREE.Vector2(1.0, 1.0),
-          roughness: 0.5,
-          metalness: 0.0,
-          clearcoat: 0.04,
-          clearcoatRoughness: 0.7,
-          sheen: 0.25,
-          sheenRoughness: 0.5,
-          sheenColor: new THREE.Color(0xffccaa),
-          envMapIntensity: 0.4,
-          emissive: new THREE.Color(colors.emissive),
-          emissiveIntensity: 0.02,
-        });
-        mesh.material = mat;
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-      }
-    });
-    return clone;
-  }, [scene, colorMap, normalMap, colors.emissive]);
-
-  useFrame((state) => {
-    const t = state.clock.elapsedTime;
-    if (!groupRef.current) return;
-
-    const headTurn = Math.sin(t * 0.25 + offset) * (isActive ? 0.1 : 0.03);
-    const headNod = Math.sin(t * 0.18 + offset) * 0.02;
-    groupRef.current.rotation.y = headTurn;
-    groupRef.current.rotation.x = headNod;
-
-    const cs = groupRef.current.scale.x;
-    const ts = isActive ? 1.0 : 0.82;
-    groupRef.current.scale.setScalar(THREE.MathUtils.lerp(cs, ts, 0.05));
-
-    if (glowRef.current) {
-      const mat = glowRef.current.material as THREE.MeshBasicMaterial;
-      if (isSpeaking) {
-        mat.opacity = 0.03 + Math.abs(Math.sin(t * 6)) * 0.04;
-      } else {
-        mat.opacity = THREE.MathUtils.lerp(mat.opacity, 0, 0.1);
-      }
-    }
-  });
-
-  return (
-    <group ref={groupRef}>
-      <primitive object={model} scale={0.13} position={[0, 0, 0]} />
-
-      <mesh ref={glowRef} position={[0, 0, -0.2]}>
-        <sphereGeometry args={[1.8, 24, 24]} />
-        <meshBasicMaterial
-          color={colors.primary}
-          transparent
-          opacity={0}
-          side={THREE.BackSide}
-          depthWrite={false}
-          blending={THREE.AdditiveBlending}
-        />
-      </mesh>
-    </group>
-  );
-}
-
-function LoadingAvatar({ color }: { color: number }) {
-  const ref = useRef<THREE.Mesh>(null);
-  useFrame((s) => {
-    if (ref.current) {
-      ref.current.rotation.y = s.clock.elapsedTime * 0.5;
-      (ref.current.material as THREE.MeshBasicMaterial).opacity = 0.3 + Math.sin(s.clock.elapsedTime * 2) * 0.2;
-    }
-  });
-  return (
-    <mesh ref={ref}>
-      <icosahedronGeometry args={[0.5, 1]} />
-      <meshBasicMaterial color={color} wireframe transparent opacity={0.4} blending={THREE.AdditiveBlending} />
-    </mesh>
-  );
-}
+import { useEffect, useRef } from "react";
 
 interface Avatar3DProps {
-  emotion: "neutral" | "empathetic" | "stern" | "curious" | "stressed";
+  emotion: string;
   isSpeaking: boolean;
   bpm: number;
   panelMode?: boolean;
-  panelAvatars?: { name: string; emotion: AvatarProps["emotion"] }[];
+  panelAvatars?: Array<{ name: string; color: string; icon: string }>;
   activeSpeakerIndex?: number;
   mouthOpenness?: number;
   spokenText?: string;
@@ -167,91 +15,172 @@ export default function Avatar3D({
   emotion,
   isSpeaking,
   bpm,
-  panelMode = false,
+  panelMode,
   panelAvatars,
   activeSpeakerIndex = 0,
-  mouthOpenness = 0,
+  spokenText,
 }: Avatar3DProps) {
-  const speakingStates = useMemo(() => {
-    if (!panelMode || !panelAvatars) return [isSpeaking];
-    return panelAvatars.map((_, i) => i === activeSpeakerIndex && isSpeaking);
-  }, [panelMode, panelAvatars, activeSpeakerIndex, isSpeaking]);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const getEmotionColor = () => {
+    switch (emotion) {
+      case "stern": return "#ff6b6b";
+      case "empathetic": return "#00ff88";
+      case "curious": return "#ffaa00";
+      case "stressed": return "#ff4444";
+      default: return "#00d4ff";
+    }
+  };
+
+  const getGlowIntensity = () => {
+    if (!isSpeaking) return "0 0 20px";
+    return "0 0 40px";
+  };
+
+  if (panelMode && panelAvatars) {
+    return (
+      <div
+        ref={containerRef}
+        className="w-full h-full flex items-center justify-center relative"
+        style={{
+          background: "radial-gradient(ellipse at center, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.7) 100%)",
+        }}
+      >
+        <div className="flex gap-8">
+          {panelAvatars.map((avatar, idx) => (
+            <div
+              key={idx}
+              className="flex flex-col items-center gap-3 transition-all duration-300"
+              style={{
+                opacity: idx === activeSpeakerIndex && isSpeaking ? 1 : 0.6,
+                transform: idx === activeSpeakerIndex && isSpeaking ? "scale(1.1)" : "scale(1)",
+              }}
+            >
+              <div
+                className="relative w-32 h-40 rounded-xl flex items-center justify-center font-bold text-2xl"
+                style={{
+                  background: `linear-gradient(135deg, ${avatar.color}20, ${avatar.color}10)`,
+                  border: `2px solid ${avatar.color}`,
+                  boxShadow:
+                    idx === activeSpeakerIndex && isSpeaking
+                      ? `0 0 30px ${avatar.color}, inset 0 0 30px ${avatar.color}15`
+                      : `0 0 15px ${avatar.color}66`,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "3rem",
+                    animation: idx === activeSpeakerIndex && isSpeaking ? "pulse 0.8s ease-in-out infinite" : "none",
+                  }}
+                >
+                  {avatar.icon}
+                </div>
+              </div>
+              <div className="text-xs font-mono uppercase tracking-widest text-center" style={{ color: avatar.color }}>
+                {avatar.name}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const emotionColor = getEmotionColor();
 
   return (
-    <div className="w-full h-full relative" style={{ background: "radial-gradient(ellipse at center, #0a1628 0%, #000408 70%)" }}>
-      <Canvas
-        camera={{ position: [0, 0.3, 3.0], fov: 32 }}
-        dpr={[1, 2]}
-        gl={{
-          antialias: true,
-          alpha: true,
-          toneMapping: THREE.ACESFilmicToneMapping,
-          toneMappingExposure: 1.2,
-        }}
-        shadows
-      >
-        <color attach="background" args={["#000408"]} />
-        <fog attach="fog" args={["#000408", 6, 14]} />
-
-        <Environment preset="studio" environmentIntensity={0.25} />
-
-        <ambientLight intensity={0.3} color={0xffe8d0} />
-        <directionalLight position={[2, 3, 4]} intensity={2.0} color={0xfff0e0} castShadow />
-        <directionalLight position={[-2, 1.5, 1]} intensity={0.5} color={0xc0d8ff} />
-        <directionalLight position={[0, -1, 3]} intensity={0.3} color={0xffd4b0} />
-        <spotLight position={[0, 3, 2]} intensity={0.6} angle={0.5} penumbra={0.6} color={0xfff5e6} />
-        <pointLight position={[0, 0, 3]} intensity={0.2} color={EMOTION_COLORS[emotion].primary} />
-
-        <Stars radius={8} depth={25} count={400} factor={1.2} saturation={0.1} fade speed={0.3} />
-        <AmbientParticles color={EMOTION_COLORS[emotion].primary} />
-
-        <Suspense fallback={<LoadingAvatar color={EMOTION_COLORS[emotion].primary} />}>
-          {panelMode && panelAvatars ? (
-            <group>
-              {panelAvatars.map((member, i) => {
-                const count = panelAvatars.length;
-                const spacing = Math.min(2.8, 5.5 / count);
-                const x = (i - (count - 1) / 2) * spacing;
-                const isActive = i === activeSpeakerIndex;
-                return (
-                  <group key={i} position={[x, 0.15, 0]} scale={count > 2 ? 0.5 : 0.6}>
-                    <Float speed={1.0} rotationIntensity={0.02} floatIntensity={0.04}>
-                      <HeadAvatar
-                        emotion={member.emotion}
-                        isSpeaking={speakingStates[i]}
-                        bpm={bpm}
-                        name={member.name}
-                        index={i}
-                        isActive={isActive}
-                        mouthOpenness={speakingStates[i] ? mouthOpenness : 0}
-                      />
-                    </Float>
-                  </group>
-                );
-              })}
-            </group>
-          ) : (
-            <Float speed={1.2} rotationIntensity={0.02} floatIntensity={0.06}>
-              <HeadAvatar
-                emotion={emotion}
-                isSpeaking={isSpeaking}
-                bpm={bpm}
-                isActive
-                mouthOpenness={mouthOpenness}
-              />
-            </Float>
-          )}
-        </Suspense>
-      </Canvas>
-
-      <div className="absolute inset-0 pointer-events-none"
+    <div
+      ref={containerRef}
+      className="w-full h-full flex flex-col items-center justify-center relative overflow-hidden"
+      style={{
+        background: "radial-gradient(ellipse at center, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.6) 100%)",
+      }}
+    >
+      <svg
+        width="300"
+        height="400"
+        viewBox="0 0 300 400"
         style={{
-          background: "repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,212,255,0.004) 3px,rgba(0,212,255,0.004) 4px)",
-          mixBlendMode: "screen",
+          filter: `drop-shadow(${getGlowIntensity()} ${emotionColor})`,
         }}
-      />
+      >
+        {/* Holographic head outline */}
+        <g stroke={emotionColor} strokeWidth="2" fill="none">
+          {/* Head circle */}
+          <circle cx="150" cy="100" r="60" opacity="0.8" />
+
+          {/* Face structure */}
+          <path d="M 120 80 L 180 80" opacity="0.6" />
+          <path d="M 110 100 L 190 100" opacity="0.7" />
+          <path d="M 130 110 L 170 110" opacity="0.6" />
+
+          {/* Eyes */}
+          <circle cx="135" cy="95" r="5" opacity={isSpeaking ? 1 : 0.7} />
+          <circle cx="165" cy="95" r="5" opacity={isSpeaking ? 1 : 0.7} />
+
+          {/* Nose */}
+          <path d="M 150 95 L 150 115" opacity="0.6" />
+
+          {/* Mouth */}
+          <path
+            d="M 140 120 Q 150 125 160 120"
+            opacity={isSpeaking ? 1 : 0.5}
+            strokeWidth={isSpeaking ? 3 : 2}
+          />
+
+          {/* Shoulders/Neck */}
+          <path d="M 120 160 Q 150 170 180 160" opacity="0.7" />
+          <rect x="110" y="160" width="80" height="80" rx="10" opacity="0.6" />
+
+          {/* Holographic lines effect */}
+          {[0, 30, 60, 90, 120].map((offset) => (
+            <line
+              key={`hline-${offset}`}
+              x1="120"
+              y1={100 + offset}
+              x2="180"
+              y2={100 + offset}
+              opacity="0.2"
+              strokeDasharray="5,5"
+            />
+          ))}
+        </g>
+      </svg>
+
+      {/* Emotion indicator */}
+      <div
+        className="absolute bottom-12 text-xs font-mono uppercase tracking-widest px-3 py-1.5 rounded-full"
+        style={{
+          background: `${emotionColor}20`,
+          border: `1px solid ${emotionColor}`,
+          color: emotionColor,
+          boxShadow: `0 0 10px ${emotionColor}`,
+        }}
+      >
+        {emotion.toUpperCase()}
+      </div>
+
+      {/* Speaking indicator */}
+      {isSpeaking && (
+        <div className="absolute top-12 flex gap-1">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div
+              key={`audio-${i}`}
+              className="w-1 bg-cyan-400 rounded-full"
+              style={{
+                height: `${8 + Math.sin(Date.now() / 100 + i) * 8}px`,
+                animation: "pulse 0.5s ease-in-out infinite",
+                animationDelay: `${i * 0.1}s`,
+              }}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* BPM display */}
+      <div className="absolute bottom-4 text-xs font-mono text-cyan-400" style={{ color: emotionColor }}>
+        {bpm} BPM
+      </div>
     </div>
   );
 }
-
-useGLTF.preload(HEAD_MODEL_URL);
