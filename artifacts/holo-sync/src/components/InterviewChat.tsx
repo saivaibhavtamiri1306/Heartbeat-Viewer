@@ -2,11 +2,12 @@ import { useEffect, useRef } from "react";
 
 export interface ChatMessage {
   id: string;
-  role: "avatar" | "candidate" | "system";
+  role: "avatar" | "candidate" | "system" | "evaluation";
   text: string;
   timestamp: number;
   avatarName?: string;
   flagged?: boolean;
+  evalScore?: number;
 }
 
 interface InterviewChatProps {
@@ -28,7 +29,38 @@ export default function InterviewChat({ messages, isTyping }: InterviewChatProps
           key={msg.id}
           className={`flex flex-col gap-1 ${msg.role === "candidate" ? "items-end" : "items-start"}`}
         >
-          {msg.role === "system" ? (
+          {msg.role === "evaluation" ? (
+            <div className="w-full">
+              <div className="rounded-xl px-3.5 py-2.5 text-[12px] leading-relaxed"
+                style={{
+                  background: (msg.evalScore ?? 5) >= 7
+                    ? "linear-gradient(135deg, rgba(0, 200, 120, 0.08), rgba(0, 180, 100, 0.04))"
+                    : (msg.evalScore ?? 5) >= 5
+                    ? "linear-gradient(135deg, rgba(255, 200, 50, 0.08), rgba(200, 160, 40, 0.04))"
+                    : "linear-gradient(135deg, rgba(255, 100, 80, 0.08), rgba(200, 80, 60, 0.04))",
+                  border: `1px solid ${(msg.evalScore ?? 5) >= 7
+                    ? "rgba(0, 200, 120, 0.2)"
+                    : (msg.evalScore ?? 5) >= 5
+                    ? "rgba(255, 200, 50, 0.2)"
+                    : "rgba(255, 100, 80, 0.2)"}`,
+                }}>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="text-[10px] font-mono font-bold uppercase tracking-[0.15em]"
+                    style={{ color: (msg.evalScore ?? 5) >= 7 ? "#00c878" : (msg.evalScore ?? 5) >= 5 ? "#ffaa00" : "#ff6450" }}>
+                    {(msg.evalScore ?? 5) >= 7 ? "✓ Good Answer" : (msg.evalScore ?? 5) >= 5 ? "◐ Partial" : "✗ Needs Work"}
+                  </span>
+                  <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded"
+                    style={{
+                      background: (msg.evalScore ?? 5) >= 7 ? "rgba(0,200,120,0.15)" : (msg.evalScore ?? 5) >= 5 ? "rgba(255,200,50,0.15)" : "rgba(255,100,80,0.15)",
+                      color: (msg.evalScore ?? 5) >= 7 ? "#00c878" : (msg.evalScore ?? 5) >= 5 ? "#ffaa00" : "#ff6450",
+                    }}>
+                    {msg.evalScore}/10
+                  </span>
+                </div>
+                <div style={{ color: "rgba(180, 210, 230, 0.75)" }}>{msg.text}</div>
+              </div>
+            </div>
+          ) : msg.role === "system" ? (
             <div className="w-full text-center">
               <span
                 className="text-[10px] font-mono uppercase tracking-[0.15em] rounded-full px-3 py-1"
@@ -45,9 +77,9 @@ export default function InterviewChat({ messages, isTyping }: InterviewChatProps
             <>
               <div className="flex items-center gap-1.5">
                 {msg.role === "avatar" && (
-                  <div className="w-1 h-1 rounded-full" style={{ background: "#00d4ff", boxShadow: "0 0 4px #00d4ff" }} />
+                  <div className="w-1 h-1 rounded-full" style={{ background: "#4ecdc4", boxShadow: "0 0 4px rgba(78,205,196,0.6)" }} />
                 )}
-                <span className="text-[10px] font-mono uppercase tracking-[0.15em]" style={{ color: "rgba(120, 140, 170, 0.6)" }}>
+                <span className="text-[10px] font-mono uppercase tracking-[0.15em]" style={{ color: "rgba(120, 155, 185, 0.5)" }}>
                   {msg.avatarName || (msg.role === "avatar" ? "HOLO-AI" : "YOU")}
                 </span>
                 {msg.flagged && (
@@ -63,10 +95,10 @@ export default function InterviewChat({ messages, isTyping }: InterviewChatProps
                 className="max-w-[88%] rounded-xl px-3.5 py-2.5 text-[13px] leading-relaxed"
                 style={{
                   background: msg.role === "avatar"
-                    ? "linear-gradient(135deg, rgba(0, 212, 255, 0.06), rgba(0, 150, 200, 0.04))"
-                    : "linear-gradient(135deg, rgba(119, 0, 255, 0.06), rgba(168, 85, 247, 0.04))",
-                  border: `1px solid ${msg.role === "avatar" ? "rgba(0, 212, 255, 0.12)" : "rgba(168, 85, 247, 0.12)"}`,
-                  color: msg.role === "avatar" ? "rgba(180, 225, 255, 0.85)" : "rgba(210, 180, 255, 0.85)",
+                    ? "linear-gradient(135deg, rgba(78, 205, 196, 0.05), rgba(60, 160, 155, 0.03))"
+                    : "linear-gradient(135deg, rgba(167, 139, 250, 0.05), rgba(140, 110, 220, 0.03))",
+                  border: `1px solid ${msg.role === "avatar" ? "rgba(78, 205, 196, 0.1)" : "rgba(167, 139, 250, 0.1)"}`,
+                  color: msg.role === "avatar" ? "rgba(180, 215, 230, 0.8)" : "rgba(200, 185, 240, 0.8)",
                 }}
               >
                 {msg.text}
@@ -79,14 +111,14 @@ export default function InterviewChat({ messages, isTyping }: InterviewChatProps
       {isTyping && (
         <div className="flex flex-col items-start gap-1">
           <div className="flex items-center gap-1.5">
-            <div className="w-1 h-1 rounded-full" style={{ background: "#00d4ff", boxShadow: "0 0 4px #00d4ff" }} />
-            <span className="text-[10px] font-mono uppercase tracking-[0.15em]" style={{ color: "rgba(120, 140, 170, 0.6)" }}>HOLO-AI</span>
+            <div className="w-1 h-1 rounded-full" style={{ background: "#4ecdc4", boxShadow: "0 0 4px rgba(78,205,196,0.6)" }} />
+            <span className="text-[10px] font-mono uppercase tracking-[0.15em]" style={{ color: "rgba(120, 155, 185, 0.5)" }}>HOLO-AI</span>
           </div>
           <div
             className="rounded-xl px-3.5 py-2.5"
             style={{
-              background: "linear-gradient(135deg, rgba(0, 212, 255, 0.06), rgba(0, 150, 200, 0.04))",
-              border: "1px solid rgba(0, 212, 255, 0.12)",
+              background: "linear-gradient(135deg, rgba(78, 205, 196, 0.05), rgba(60, 160, 155, 0.03))",
+              border: "1px solid rgba(78, 205, 196, 0.1)",
             }}
           >
             <div className="flex gap-1.5 items-center">
@@ -95,7 +127,7 @@ export default function InterviewChat({ messages, isTyping }: InterviewChatProps
                   key={i}
                   className="w-1.5 h-1.5 rounded-full"
                   style={{
-                    background: "#00d4ff",
+                    background: "#4ecdc4",
                     animation: `pulse 1s ease-in-out ${i * 0.2}s infinite`,
                   }}
                 />

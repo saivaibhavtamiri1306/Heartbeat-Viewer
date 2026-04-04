@@ -191,6 +191,51 @@ interface AnalysisResult {
   method: string;
 }
 
+function welchPSD(sig: number[], fps: number, segLen: number, overlap: number): { mag: Float64Array; freqRes: number; fftLen: number } {
+  const N = sig.length;
+  const step = Math.max(1, Math.round(segLen * (1 - overlap)));
+  const nSegs = Math.max(1, Math.floor((N - segLen) / step) + 1);
+
+  let pad = 1;
+  while (pad < segLen * 4) pad <<= 1;
+
+  const avgMag = new Float64Array(pad >> 1);
+
+  for (let s = 0; s < nSegs; s++) {
+    const start = s * step;
+    const re = new Float64Array(pad);
+    const im = new Float64Array(pad);
+    for (let i = 0; i < segLen && start + i < N; i++) {
+      const w = 0.54 - 0.46 * Math.cos(2 * Math.PI * i / (segLen - 1));
+      re[i] = sig[start + i] * w;
+    }
+    fft(re, im);
+    for (let k = 0; k < avgMag.length; k++) {
+      avgMag[k] += re[k] * re[k] + im[k] * im[k];
+    }
+  }
+
+  if (nSegs * step + segLen < N) {
+    const start = N - segLen;
+    const re = new Float64Array(pad);
+    const im = new Float64Array(pad);
+    for (let i = 0; i < segLen; i++) {
+      const w = 0.54 - 0.46 * Math.cos(2 * Math.PI * i / (segLen - 1));
+      re[i] = sig[start + i] * w;
+    }
+    fft(re, im);
+    for (let k = 0; k < avgMag.length; k++) {
+      avgMag[k] += re[k] * re[k] + im[k] * im[k];
+    }
+    const totalSegs = nSegs + 1;
+    for (let k = 0; k < avgMag.length; k++) avgMag[k] = Math.sqrt(avgMag[k] / totalSegs);
+  } else {
+    for (let k = 0; k < avgMag.length; k++) avgMag[k] = Math.sqrt(avgMag[k] / nSegs);
+  }
+
+  return { mag: avgMag, freqRes: fps / pad, fftLen: pad };
+}
+
 function analyzeSignal(
   rawSig: number[], fps: number, preFiltered: boolean, method: string
 ): AnalysisResult {
@@ -206,22 +251,31 @@ function analyzeSignal(
     processed = butterworthBandpass(processed, fps, FL, FH);
   }
 
-  let pad = 1;
-  while (pad < N * 4) pad <<= 1;
+  const useWelch = N >= 90;
+  let mag: Float64Array;
+  let freqRes: number;
+  let fftLen: number;
 
-  const re = new Float64Array(pad);
-  const im = new Float64Array(pad);
-  for (let i = 0; i < N; i++) {
-    const w = 0.54 - 0.46 * Math.cos(2 * Math.PI * i / (N - 1));
-    re[i] = processed[i] * w;
+  if (useWelch) {
+    const segLen = Math.min(N, Math.max(64, Math.round(fps * 2)));
+    const result = welchPSD(processed, fps, segLen, 0.5);
+    mag = result.mag; freqRes = result.freqRes; fftLen = result.fftLen;
+  } else {
+    let pad = 1;
+    while (pad < N * 4) pad <<= 1;
+    fftLen = pad;
+    const re = new Float64Array(pad);
+    const im = new Float64Array(pad);
+    for (let i = 0; i < N; i++) {
+      const w = 0.54 - 0.46 * Math.cos(2 * Math.PI * i / (N - 1));
+      re[i] = processed[i] * w;
+    }
+    fft(re, im);
+    mag = new Float64Array(pad >> 1);
+    for (let i = 0; i < mag.length; i++) mag[i] = Math.sqrt(re[i] * re[i] + im[i] * im[i]);
+    freqRes = fps / pad;
   }
 
-  fft(re, im);
-
-  const mag = new Float64Array(pad >> 1);
-  for (let i = 0; i < mag.length; i++) mag[i] = Math.sqrt(re[i] * re[i] + im[i] * im[i]);
-
-  const freqRes = fps / pad;
   const loIdx = Math.max(1, Math.floor(FL / freqRes));
   const hiIdx = Math.min(mag.length - 2, Math.ceil(FH / freqRes));
 
@@ -283,7 +337,8 @@ function analyzeSignal(
 
   return {
     bpm: Math.round(clamp(freq * 60, BPM_LO, BPM_HI)),
-    confidence: conf, snr, sqi, waveform, spectrum: specDisplay, method,
+    confidence: conf, snr, sqi, waveform, spectrum: specDisplay,
+    method: useWelch ? method + "/W" : method,
   };
 }
 
@@ -645,9 +700,16 @@ export function useHeartbeat(
       return;
     }
 
-    rBuf.current.push(roi.r);
-    gBuf.current.push(roi.g);
-    bBuf.current.push(roi.b);
+    const lum = roi.r + roi.g + roi.b;
+    const meanLum = lum / 3;
+    const normFactor = meanLum > 5 ? Math.min(3.0, 128 / meanLum) : 1;
+    const nR = Math.min(255, roi.r * normFactor);
+    const nG = Math.min(255, roi.g * normFactor);
+    const nB = Math.min(255, roi.b * normFactor);
+
+    rBuf.current.push(nR);
+    gBuf.current.push(nG);
+    bBuf.current.push(nB);
     tsBuf.current.push(now);
 
     while (rBuf.current.length > BUFFER_SIZE) {

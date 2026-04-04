@@ -397,7 +397,7 @@ export function getFilteredQuestions(
   domainId: string,
   topics: string[],
   difficulty: Difficulty,
-  maxQuestions: number = 10
+  maxQuestions: number = 15
 ): Question[] {
   const allQuestions = QUESTIONS[domainId] || [];
 

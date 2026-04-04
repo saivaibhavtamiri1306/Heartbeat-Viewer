@@ -35,7 +35,7 @@ function RadialBar({ value, max, color, label, size = 48 }: {
           {Math.round(pct * 100)}
         </div>
       </div>
-      <div className="text-xs font-mono text-cyan-600/60 uppercase tracking-wider text-center leading-tight" style={{ fontSize: "9px" }}>
+      <div className="text-xs font-mono uppercase tracking-wider text-center leading-tight" style={{ fontSize: "9px", color: "rgba(120,180,200,0.4)" }}>
         {label}
       </div>
     </div>
@@ -54,21 +54,21 @@ export default function StudentAnalytics({ analytics, isListening, answerCount, 
   const mins = Math.floor(sessionTime / 60);
   const secs = sessionTime % 60;
 
-  const wpmColor = analytics.wpm > 140 ? "#ffaa00" : analytics.wpm > 80 ? "#00ff88" : "#00d4ff";
-  const vocabColor = analytics.vocabularyScore > 70 ? "#00ff88" : analytics.vocabularyScore > 40 ? "#ffaa00" : "#ff4444";
-  const confColor = analytics.confidenceScore > 70 ? "#00ff88" : analytics.confidenceScore > 40 ? "#ffaa00" : "#ff4444";
+  const wpmColor = analytics.wpm > 140 ? "#ffc078" : analytics.wpm > 80 ? "#4ecdc4" : "#a78bfa";
+  const vocabColor = analytics.vocabularyScore > 70 ? "#4ecdc4" : analytics.vocabularyScore > 40 ? "#ffc078" : "#ff6b6b";
+  const confColor = analytics.confidenceScore > 70 ? "#4ecdc4" : analytics.confidenceScore > 40 ? "#ffc078" : "#ff6b6b";
 
   return (
     <div className="glass-panel flex flex-col gap-2 rounded-2xl overflow-hidden">
       <div className="flex items-center justify-between px-3 pt-3">
-        <span className="text-[10px] font-mono uppercase tracking-[0.2em]" style={{ color: "rgba(0, 212, 255, 0.45)" }}>
+        <span className="text-[10px] font-mono uppercase tracking-[0.2em]" style={{ color: "rgba(120, 180, 200, 0.4)" }}>
           Student Analytics
         </span>
         <div className="flex items-center gap-1.5">
-          <div className={`w-1.5 h-1.5 rounded-full ${isListening ? "bg-green-400 animate-pulse" : "bg-gray-700"}`}
-            style={{ boxShadow: isListening ? "0 0 6px #00ff88" : "none" }} />
+          <div className={`w-1.5 h-1.5 rounded-full ${isListening ? "animate-pulse" : ""}`}
+            style={{ background: isListening ? "#4ecdc4" : "rgba(80,90,100,0.4)", boxShadow: isListening ? "0 0 6px rgba(78,205,196,0.6)" : "none" }} />
           <span className="text-[10px] font-mono uppercase tracking-[0.1em]"
-            style={{ color: isListening ? "#00ff88" : "rgba(100, 120, 140, 0.4)" }}>
+            style={{ color: isListening ? "#4ecdc4" : "rgba(100, 120, 140, 0.4)" }}>
             {isListening ? "LIVE" : "IDLE"}
           </span>
         </div>
@@ -79,7 +79,7 @@ export default function StudentAnalytics({ analytics, isListening, answerCount, 
         <RadialBar value={analytics.wpm} max={160} color={wpmColor} label="WPM" />
         <RadialBar value={analytics.vocabularyScore} max={100} color={vocabColor} label="VOCAB" />
         <RadialBar value={analytics.confidenceScore} max={100} color={confColor} label="CONFID" />
-        <RadialBar value={answerCount} max={10} color="#7700ff" label={`Q/${answerCount}`} />
+        <RadialBar value={answerCount} max={15} color="#a78bfa" label={`Q/${answerCount}`} />
       </div>
 
       {/* Stats row */}
@@ -89,17 +89,17 @@ export default function StudentAnalytics({ analytics, isListening, answerCount, 
           { label: "Fillers", value: analytics.fillerCount, bad: analytics.fillerCount > 5 },
           { label: `${mins}m${secs.toString().padStart(2,"0")}s`, value: null, label2: "Time" },
         ].map((stat, i) => (
-          <div key={i} className="rounded-xl px-2 py-1.5" style={{ background: "rgba(6, 12, 24, 0.5)", border: "1px solid rgba(0, 212, 255, 0.06)" }}>
+          <div key={i} className="rounded-xl px-2 py-1.5" style={{ background: "rgba(10, 20, 32, 0.4)", border: "1px solid rgba(78, 205, 196, 0.05)" }}>
             {stat.value !== null ? (
-              <div className="text-sm font-black font-mono" style={{ color: stat.bad ? "#ff4444" : "rgba(0, 212, 255, 0.8)" }}>
+              <div className="text-sm font-black font-mono" style={{ color: stat.bad ? "#ff6b6b" : "rgba(78, 205, 196, 0.7)" }}>
                 {stat.value}
               </div>
             ) : (
-              <div className="text-xs font-black font-mono" style={{ color: "#a855f7" }}>
+              <div className="text-xs font-black font-mono" style={{ color: "#a78bfa" }}>
                 {stat.label}
               </div>
             )}
-            <div className="font-mono uppercase tracking-[0.1em]" style={{ fontSize: "8px", color: "rgba(0, 212, 255, 0.3)" }}>
+            <div className="font-mono uppercase tracking-[0.1em]" style={{ fontSize: "8px", color: "rgba(120, 180, 200, 0.3)" }}>
               {stat.value !== null ? stat.label : stat.label2}
             </div>
           </div>
@@ -109,7 +109,7 @@ export default function StudentAnalytics({ analytics, isListening, answerCount, 
       {/* Filler word badges */}
       {analytics.fillerWords.length > 0 && (
         <div className="px-3 pb-2.5">
-          <div className="font-mono uppercase tracking-[0.15em] mb-1" style={{ fontSize: "9px", color: "rgba(0, 212, 255, 0.3)" }}>
+          <div className="font-mono uppercase tracking-[0.15em] mb-1" style={{ fontSize: "9px", color: "rgba(120, 180, 200, 0.3)" }}>
             Detected Fillers
           </div>
           <div className="flex flex-wrap gap-1">
@@ -128,7 +128,7 @@ export default function StudentAnalytics({ analytics, isListening, answerCount, 
               </span>
             ))}
             {analytics.fillerWords.length > 6 && (
-              <span className="font-mono" style={{ fontSize: "9px", color: "rgba(0, 212, 255, 0.25)" }}>
+              <span className="font-mono" style={{ fontSize: "9px", color: "rgba(120, 180, 200, 0.25)" }}>
                 +{analytics.fillerWords.length - 6} more
               </span>
             )}
@@ -137,11 +137,11 @@ export default function StudentAnalytics({ analytics, isListening, answerCount, 
       )}
 
       {analytics.wordCount > 30 && (
-        <div className="mx-3 mb-2.5 px-2.5 py-2 rounded-xl" style={{ background: "rgba(0, 212, 255, 0.03)", border: "1px solid rgba(0, 212, 255, 0.08)" }}>
-          <div className="font-mono uppercase tracking-[0.15em] mb-0.5" style={{ fontSize: "9px", color: "rgba(0, 212, 255, 0.4)" }}>
+        <div className="mx-3 mb-2.5 px-2.5 py-2 rounded-xl" style={{ background: "rgba(78, 205, 196, 0.03)", border: "1px solid rgba(78, 205, 196, 0.06)" }}>
+          <div className="font-mono uppercase tracking-[0.15em] mb-0.5" style={{ fontSize: "9px", color: "rgba(120, 180, 200, 0.4)" }}>
             AI Coach
           </div>
-          <div className="font-mono leading-relaxed" style={{ fontSize: "10px", color: "rgba(180, 220, 255, 0.6)" }}>
+          <div className="font-mono leading-relaxed" style={{ fontSize: "10px", color: "rgba(170, 200, 220, 0.6)" }}>
             {analytics.confidenceScore < 40
               ? "Reduce filler words — pause instead of saying 'um'."
               : analytics.wpm > 150

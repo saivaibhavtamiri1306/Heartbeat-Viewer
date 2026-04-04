@@ -142,7 +142,7 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
     const runId = ++speechRunIdRef.current;
 
     setIsTyping(true);
-    const delay = Math.min(1200, text.length * 18);
+    const delay = Math.min(600, text.length * 8);
     await new Promise(r => setTimeout(r, delay));
 
     if (runId !== speechRunIdRef.current) return;
@@ -448,10 +448,21 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
     })
       .then(r => r.json())
       .then(ev => {
+        const evalScore = Math.max(0, Math.min(10, ev.score ?? 5));
+        const feedbackParts: string[] = [];
+        if (ev.strengths) feedbackParts.push(`✦ ${ev.strengths}`);
+        if (ev.weaknesses) feedbackParts.push(`△ ${ev.weaknesses}`);
+        if (ev.suggestion) feedbackParts.push(`→ ${ev.suggestion}`);
+        const feedbackText = feedbackParts.join("  ");
+        addMessage({
+          role: "evaluation",
+          text: feedbackText || "Answer evaluated.",
+          evalScore,
+        });
         setEvaluations(prev => [...prev, {
           question: currentQ?.text || "",
           answer: text,
-          score: ev.score || 5,
+          score: evalScore,
           strengths: ev.strengths || "",
           weaknesses: ev.weaknesses || "",
           suggestion: ev.suggestion || "",
@@ -482,7 +493,7 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
       const drillDown = BLUFF_RESPONSES[Math.floor(Math.random() * BLUFF_RESPONSES.length)];
       await speakMessage(drillDown, currentQ.avatarName, true);
       setTimeout(() => setBluffDetected(false), 8000);
-    } else if (followUpCount < 2 && text.length > 30 && Math.random() < 0.4) {
+    } else if (followUpCount < 3 && text.length > 20 && Math.random() < 0.7) {
       try {
         addMessage({ role: "system", text: "🔄 AI FOLLOW-UP INCOMING..." });
         const resp = await fetch("/api/followup", {
@@ -566,14 +577,14 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
   const isInputEmpty = !userInput.trim() && !speech.interimText.trim();
 
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden" style={{ background: "linear-gradient(180deg, #020610 0%, #040a14 100%)" }}>
+    <div className="h-screen w-screen flex flex-col overflow-hidden" style={{ background: "linear-gradient(180deg, #060e1a 0%, #081420 50%, #0a1828 100%)" }}>
       {/* ── Top Bar ─────────────────────────────────────────────────── */}
       <div className="status-bar flex items-center justify-between px-4 py-2.5 z-10 shrink-0">
         <div className="flex items-center gap-3">
           <div className="text-sm font-black font-mono gradient-text">
             HOLO-SYNC
           </div>
-          <div className="h-4 w-px" style={{ background: "rgba(0, 212, 255, 0.15)" }} />
+          <div className="h-4 w-px" style={{ background: "rgba(78, 205, 196, 0.12)" }} />
           <span className="text-[11px] font-mono uppercase tracking-[0.12em] font-bold" style={{ color: domain.color }}>
             {domain.icon} {domain.label}
           </span>
@@ -641,7 +652,7 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
       <div className="flex-1 flex overflow-hidden min-h-0">
 
         {/* Left Sidebar */}
-        <div className="sidebar-panel w-64 shrink-0 flex flex-col gap-2.5 p-2.5 overflow-y-auto" style={{ borderRight: "1px solid rgba(0,212,255,0.12)" }}>
+        <div className="sidebar-panel w-64 shrink-0 flex flex-col gap-2.5 p-2.5 overflow-y-auto" style={{ borderRight: "1px solid rgba(78,205,196,0.08)" }}>
           <WebcamFeed
             videoRef={videoRef}
             isActive={camActive}
@@ -669,27 +680,27 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
 
           {/* Live Scores */}
           <div className="glass-panel flex flex-col gap-2 p-3 rounded-2xl">
-            <div className="text-[10px] font-mono uppercase tracking-[0.2em] mb-1" style={{ color: "rgba(0, 212, 255, 0.4)" }}>Live Scores</div>
+            <div className="text-[10px] font-mono uppercase tracking-[0.2em] mb-1" style={{ color: "rgba(120, 180, 200, 0.4)" }}>Live Scores</div>
             {[
-              { label: "Communication", value: score.communication, color: "#00d4ff" },
-              { label: "Technical", value: score.technical, color: "#7700ff" },
-              { label: "Composure", value: heartData.stress === "high" ? 30 : heartData.stress === "medium" ? 65 : 100, color: heartData.stress === "high" ? "#ff4444" : "#00ff88" },
+              { label: "Communication", value: score.communication, color: "#4ecdc4" },
+              { label: "Technical", value: score.technical, color: "#a78bfa" },
+              { label: "Composure", value: heartData.stress === "high" ? 30 : heartData.stress === "medium" ? 65 : 100, color: heartData.stress === "high" ? "#ff6b6b" : "#4ecdc4" },
             ].map(s => (
               <div key={s.label} className="flex flex-col gap-1">
                 <div className="flex justify-between font-mono">
-                  <span className="text-[10px]" style={{ color: "rgba(160, 180, 200, 0.5)" }}>{s.label}</span>
+                  <span className="text-[10px]" style={{ color: "rgba(140, 170, 200, 0.5)" }}>{s.label}</span>
                   <span className="text-[10px] tabular-nums" style={{ color: s.color }}>{s.value}%</span>
                 </div>
-                <div className="h-1 rounded-full" style={{ background: "rgba(20, 30, 50, 0.6)" }}>
+                <div className="h-1 rounded-full" style={{ background: "rgba(20, 35, 50, 0.5)" }}>
                   <div className="h-full rounded-full transition-all duration-700"
                     style={{ width: `${s.value}%`, background: `linear-gradient(90deg, ${s.color}88, ${s.color})`, boxShadow: `0 0 6px ${s.color}44` }} />
                 </div>
               </div>
             ))}
-            <div className="mt-1.5 pt-2" style={{ borderTop: "1px solid rgba(0, 212, 255, 0.08)" }}>
+            <div className="mt-1.5 pt-2" style={{ borderTop: "1px solid rgba(78, 205, 196, 0.06)" }}>
               <div className="flex justify-between font-mono font-bold">
-                <span className="text-[10px] uppercase tracking-[0.15em]" style={{ color: "rgba(0, 212, 255, 0.5)" }}>Overall</span>
-                <span className="text-[10px] tabular-nums" style={{ color: "#00d4ff" }}>{overallScore}%</span>
+                <span className="text-[10px] uppercase tracking-[0.15em]" style={{ color: "rgba(120, 180, 200, 0.5)" }}>Overall</span>
+                <span className="text-[10px] tabular-nums" style={{ color: "#4ecdc4" }}>{overallScore}%</span>
               </div>
             </div>
           </div>
@@ -697,7 +708,7 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
 
         {/* Center — Avatar */}
         <div className="flex-1 flex flex-col min-w-0 relative">
-          <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at center, rgba(0,212,255,0.04) 0%, rgba(119,0,255,0.02) 40%, transparent 70%)" }} />
+          <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at center, rgba(78,205,196,0.03) 0%, rgba(167,139,250,0.015) 40%, transparent 70%)" }} />
           <div className="flex-1 relative overflow-hidden">
             <Avatar3D
               emotion={avatarEmotion}
@@ -712,34 +723,34 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
             />
 
             <div className="absolute top-3 left-3 flex flex-col gap-1 pointer-events-none">
-              <div className="text-[10px] font-mono uppercase tracking-[0.2em]" style={{ color: "rgba(0, 212, 255, 0.3)" }}>3D Holographic Interface</div>
-              <div className="text-[10px] font-mono uppercase tracking-[0.15em]" style={{ color: "rgba(0, 212, 255, 0.2)" }}>Emotion: {avatarEmotion.toUpperCase()}</div>
+              <div className="text-[10px] font-mono uppercase tracking-[0.2em]" style={{ color: "rgba(120, 180, 200, 0.25)" }}>3D Avatar Interface</div>
+              <div className="text-[10px] font-mono uppercase tracking-[0.15em]" style={{ color: "rgba(120, 180, 200, 0.18)" }}>Emotion: {avatarEmotion.toUpperCase()}</div>
             </div>
 
             {isTyping && (
               <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-10 rounded-full px-4 py-2"
-                style={{ background: "rgba(4, 8, 16, 0.85)", border: "1px solid rgba(0, 212, 255, 0.2)", backdropFilter: "blur(12px)" }}>
-                <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
-                <span className="text-[10px] font-mono uppercase tracking-[0.15em]" style={{ color: "rgba(0, 212, 255, 0.7)" }}>Composing response...</span>
+                style={{ background: "rgba(8, 16, 28, 0.85)", border: "1px solid rgba(78, 205, 196, 0.15)", backdropFilter: "blur(12px)" }}>
+                <div className="w-1.5 h-1.5 rounded-full animate-ping" style={{ background: "#4ecdc4" }} />
+                <span className="text-[10px] font-mono uppercase tracking-[0.15em]" style={{ color: "rgba(78, 205, 196, 0.65)" }}>Composing response...</span>
               </div>
             )}
 
             {isSpeaking && !isTyping && (
               <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-10 rounded-full px-4 py-2"
-                style={{ background: "rgba(4, 8, 16, 0.85)", border: "1px solid rgba(119, 0, 255, 0.2)", backdropFilter: "blur(12px)" }}>
+                style={{ background: "rgba(8, 16, 28, 0.85)", border: "1px solid rgba(167, 139, 250, 0.15)", backdropFilter: "blur(12px)" }}>
                 <div className="flex gap-0.5">
                   {[0,1,2,3].map(i => (
-                    <div key={i} className="w-0.5 bg-purple-400 rounded-full animate-bounce"
-                      style={{ height: `${8 + Math.random() * 8}px`, animationDelay: `${i * 0.1}s` }} />
+                    <div key={i} className="w-0.5 rounded-full animate-bounce"
+                      style={{ background: "#a78bfa", height: `${8 + Math.random() * 8}px`, animationDelay: `${i * 0.1}s` }} />
                   ))}
                 </div>
-                <span className="text-[10px] font-mono uppercase tracking-[0.15em]" style={{ color: "rgba(168, 85, 247, 0.7)" }}>Interviewer Speaking...</span>
+                <span className="text-[10px] font-mono uppercase tracking-[0.15em]" style={{ color: "rgba(167, 139, 250, 0.65)" }}>Interviewer Speaking...</span>
               </div>
             )}
 
             {empathyMode && (
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
-                <div className="text-6xl animate-heartbeat opacity-20" style={{ color: "#00ff88", filter: "blur(1px)" }}>♥</div>
+                <div className="text-6xl animate-heartbeat opacity-15" style={{ color: "#4ecdc4", filter: "blur(1px)" }}>♥</div>
               </div>
             )}
           </div>
@@ -783,8 +794,8 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
                 title={micOn ? "Stop microphone" : "Start microphone"}
                 className={`relative shrink-0 w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-200 disabled:opacity-40 ${
                   micOn
-                    ? "bg-red-500/20 border-2 border-red-500 shadow-[0_0_20px_rgba(255,68,68,0.4)]"
-                    : "bg-cyan-500/10 border border-cyan-500/40 hover:bg-cyan-500/20"
+                    ? "bg-red-500/20 border-2 border-red-500 shadow-[0_0_15px_rgba(255,107,107,0.3)]"
+                    : "border hover:bg-teal-500/10"
                 }`}
               >
                 {micOn && (
@@ -792,15 +803,15 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
                 )}
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
                   <rect x="9" y="2" width="6" height="12" rx="3"
-                    fill={micOn ? "#ff4444" : "#00d4ff"} />
+                    fill={micOn ? "#ff6b6b" : "#4ecdc4"} />
                   <path d="M5 10c0 3.866 3.134 7 7 7s7-3.134 7-7"
-                    stroke={micOn ? "#ff4444" : "#00d4ff"} strokeWidth="2" strokeLinecap="round" />
+                    stroke={micOn ? "#ff6b6b" : "#4ecdc4"} strokeWidth="2" strokeLinecap="round" />
                   <line x1="12" y1="17" x2="12" y2="22"
-                    stroke={micOn ? "#ff4444" : "#00d4ff"} strokeWidth="2" strokeLinecap="round" />
+                    stroke={micOn ? "#ff6b6b" : "#4ecdc4"} strokeWidth="2" strokeLinecap="round" />
                   <line x1="9" y1="22" x2="15" y2="22"
-                    stroke={micOn ? "#ff4444" : "#00d4ff"} strokeWidth="2" strokeLinecap="round" />
+                    stroke={micOn ? "#ff6b6b" : "#4ecdc4"} strokeWidth="2" strokeLinecap="round" />
                   {!micOn && (
-                    <line x1="4" y1="4" x2="20" y2="20" stroke="#00d4ff" strokeWidth="2" strokeLinecap="round" opacity="0.5" />
+                    <line x1="4" y1="4" x2="20" y2="20" stroke="#4ecdc4" strokeWidth="2" strokeLinecap="round" opacity="0.5" />
                   )}
                 </svg>
               </button>
@@ -823,10 +834,10 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
                   disabled={phase === "ended" || phase === "starting" || isSpeaking}
                   className="w-full rounded-xl px-4 py-3 text-sm font-mono focus:outline-none disabled:opacity-40 transition-all duration-300"
                   style={{
-                    background: "rgba(6, 12, 24, 0.8)",
-                    border: micOn ? "1px solid rgba(255,68,68,0.25)" : "1px solid rgba(0, 212, 255, 0.12)",
-                    color: "rgba(180, 220, 255, 0.9)",
-                    boxShadow: micOn ? "0 0 0 1px rgba(255,68,68,0.15) inset" : undefined,
+                    background: "rgba(10, 20, 32, 0.7)",
+                    border: micOn ? "1px solid rgba(255,107,107,0.2)" : "1px solid rgba(78, 205, 196, 0.1)",
+                    color: "rgba(180, 210, 240, 0.85)",
+                    boxShadow: micOn ? "0 0 0 1px rgba(255,107,107,0.1) inset" : undefined,
                   }}
                 />
                 
@@ -838,10 +849,10 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
                 disabled={phase === "ended" || phase === "starting" || isSpeaking || isInputEmpty}
                 className="shrink-0 px-5 py-3 rounded-xl font-bold text-sm uppercase tracking-[0.15em] transition-all duration-300 disabled:opacity-30 active:scale-95 cursor-pointer"
                 style={{
-                  background: !isInputEmpty ? "rgba(0,212,255,0.1)" : "rgba(30,40,60,0.3)",
-                  border: `1px solid ${!isInputEmpty ? "rgba(0,212,255,0.3)" : "rgba(60,70,90,0.3)"}`,
-                  color: !isInputEmpty ? "#00d4ff" : "rgba(60,80,100,0.5)",
-                  boxShadow: !isInputEmpty ? "0 0 20px rgba(0,212,255,0.1)" : undefined,
+                  background: !isInputEmpty ? "rgba(78,205,196,0.08)" : "rgba(30,40,60,0.25)",
+                  border: `1px solid ${!isInputEmpty ? "rgba(78,205,196,0.25)" : "rgba(60,70,90,0.25)"}`,
+                  color: !isInputEmpty ? "#4ecdc4" : "rgba(100,120,140,0.5)",
+                  boxShadow: !isInputEmpty ? "0 0 15px rgba(78,205,196,0.08)" : undefined,
                 }}
               >
                 Send
@@ -862,16 +873,16 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
         </div>
 
         {/* Right — Chat + Analytics */}
-        <div className="sidebar-panel w-80 shrink-0 flex flex-col" style={{ borderLeft: "1px solid rgba(0,212,255,0.12)" }}>
-          <div className="px-3 py-2.5 flex items-center gap-2" style={{ borderBottom: "1px solid rgba(0,212,255,0.08)" }}>
-            <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-            <span className="text-[10px] font-mono uppercase tracking-[0.2em]" style={{ color: "rgba(0, 212, 255, 0.4)" }}>Session Transcript</span>
+        <div className="sidebar-panel w-80 shrink-0 flex flex-col" style={{ borderLeft: "1px solid rgba(78,205,196,0.08)" }}>
+          <div className="px-3 py-2.5 flex items-center gap-2" style={{ borderBottom: "1px solid rgba(78,205,196,0.06)" }}>
+            <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "#4ecdc4" }} />
+            <span className="text-[10px] font-mono uppercase tracking-[0.2em]" style={{ color: "rgba(120, 180, 200, 0.4)" }}>Session Transcript</span>
           </div>
           <div className="flex-1 overflow-hidden">
             <InterviewChat messages={messages} isTyping={isTyping} />
           </div>
 
-          <div className="shrink-0 p-2.5" style={{ borderTop: "1px solid rgba(0,212,255,0.08)" }}>
+          <div className="shrink-0 p-2.5" style={{ borderTop: "1px solid rgba(78,205,196,0.06)" }}>
             <StudentAnalytics
               analytics={speech.analytics}
               isListening={speech.isListening}
@@ -881,15 +892,15 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
           </div>
 
           {phase === "ended" && (
-            <div className="shrink-0 p-3 flex flex-col gap-2" style={{ borderTop: "1px solid rgba(0,212,255,0.08)" }}>
+            <div className="shrink-0 p-3 flex flex-col gap-2" style={{ borderTop: "1px solid rgba(78,205,196,0.06)" }}>
               <button onClick={() => setShowReport(true)}
                 className="w-full py-2.5 rounded-xl font-bold text-sm uppercase tracking-[0.15em] transition-all duration-300 cursor-pointer"
-                style={{ background: "rgba(119,0,255,0.08)", border: "1px solid rgba(119,0,255,0.25)", color: "#a855f7" }}>
+                style={{ background: "rgba(167,139,250,0.08)", border: "1px solid rgba(167,139,250,0.2)", color: "#a78bfa" }}>
                 View Full Report
               </button>
               <button onClick={onEnd}
                 className="w-full py-2.5 rounded-xl font-bold text-sm uppercase tracking-[0.15em] transition-all duration-300 cursor-pointer"
-                style={{ background: "rgba(0,212,255,0.06)", border: "1px solid rgba(0,212,255,0.2)", color: "#00d4ff" }}>
+                style={{ background: "rgba(78,205,196,0.06)", border: "1px solid rgba(78,205,196,0.15)", color: "#4ecdc4" }}>
                 Return to Home
               </button>
             </div>
