@@ -71,8 +71,8 @@ export interface HeartbeatData {
 }
 
 const BUFFER_SIZE = 450;
-const MIN_FRAMES_FAST = 48;
-const MIN_FRAMES_FULL = 72;
+const MIN_FRAMES_FAST = 36;
+const MIN_FRAMES_FULL = 54;
 const BPM_LO = 42;
 const BPM_HI = 185;
 const FL = BPM_LO / 60;
@@ -549,7 +549,7 @@ function bestOfThree(
 
 function autocorrelationBPM(sig: number[], fps: number): number | null {
   const N = sig.length;
-  if (N < 60) return null;
+  if (N < 40) return null;
   const minLag = Math.round(fps * 60 / BPM_HI);
   const maxLag = Math.min(N - 1, Math.round(fps * 60 / BPM_LO));
   if (minLag >= maxLag) return null;
@@ -576,7 +576,9 @@ function isSkinPixel(r: number, g: number, b: number): boolean {
   const Y = 0.299 * r + 0.587 * g + 0.114 * b;
   const Cb = -0.1687 * r - 0.3313 * g + 0.5 * b + 128;
   const Cr = 0.5 * r - 0.4187 * g - 0.0813 * b + 128;
-  return Y > 40 && Y < 235 && Cb > 77 && Cb < 140 && Cr > 130 && Cr < 185;
+  if (Y > 30 && Y < 240 && Cb > 75 && Cb < 145 && Cr > 125 && Cr < 200) return true;
+  if (r > 60 && g > 30 && b > 15 && r > g && g > b && (r - g) > 10 && Y > 35 && Y < 230) return true;
+  return false;
 }
 
 function sampleRGBSkinFiltered(
@@ -631,12 +633,38 @@ function sampleRGBSkinFiltered(
     }
   }
 
+  if (totalW < 1 && faceBox && faceBox.w > 20 && faceBox.h > 20) {
+    const fx = Math.max(0, Math.floor(faceBox.x + faceBox.w * 0.25));
+    const fy = Math.max(0, Math.floor(faceBox.y + faceBox.h * 0.1));
+    const fw = Math.max(1, Math.min(Math.floor(faceBox.w * 0.5), vw - fx));
+    const fh = Math.max(1, Math.min(Math.floor(faceBox.h * 0.35), vh - fy));
+    if (fw > 4 && fh > 4) {
+      try {
+        const d = ctx.getImageData(fx, fy, fw, fh).data;
+        let sr = 0, sg = 0, sb = 0, cnt = 0;
+        for (let py = 0; py < fh; py += 2) {
+          for (let px = 0; px < fw; px += 2) {
+            const idx = (py * fw + px) * 4;
+            sr += d[idx]; sg += d[idx + 1]; sb += d[idx + 2]; cnt++;
+          }
+        }
+        if (cnt > 0) {
+          const fr = sr / cnt, fg = sg / cnt, fb = sb / cnt;
+          const fb2 = 0.299 * fr + 0.587 * fg + 0.114 * fb;
+          if (fb2 > 20 && fb2 < 245) {
+            return { r: fr, g: fg, b: fb, brightness: fb2, ok: true, label: "RAW", skinRatio: 0.5, motion: 0 };
+          }
+        }
+      } catch { /* ignore */ }
+    }
+  }
+
   if (totalW < 1) return { r: 0, g: 0, b: 0, brightness: 0, ok: false, label: "NONE", skinRatio: 0, motion: 0 };
 
   const r = totalR / totalW, g = totalG / totalW, b = totalB / totalW;
   const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
   const skinRatio = allCnt > 0 ? skinCnt / allCnt : 0;
-  const ok = brightness > 30 && brightness < 240 && skinRatio > 0.12;
+  const ok = brightness > 20 && brightness < 245 && skinRatio > 0.05;
 
   let varSum = 0;
   if (pixR.length > 1) {
@@ -725,7 +753,10 @@ export function useHeartbeat(
 
     if (!roi.ok) {
       noFace.current++;
-      if (noFace.current >= 30) {
+      if (noFace.current === 5 || noFace.current === 30) {
+        console.warn(`[rPPG] ROI failed: label=${roi.label} skin=${(roi.skinRatio * 100).toFixed(0)}% bright=${roi.brightness.toFixed(0)} noFace=${noFace.current}`);
+      }
+      if (noFace.current >= 45) {
         bpmRef.current = null;
         rBuf.current = []; gBuf.current = []; bBuf.current = [];
         tsBuf.current = []; bpmHistory.current = []; motionBuf.current = [];
@@ -797,6 +828,10 @@ export function useHeartbeat(
 
       const result = bestOfThree(rBuf.current, gBuf.current, bBuf.current, actualFps);
 
+      if (frameRef.current % 30 === 0) {
+        console.log(`[rPPG] buf=${bufLen} fps=${actualFps.toFixed(1)} bpm=${result.bpm} snr=${result.snr.toFixed(1)} sqi=${result.sqi.toFixed(2)} conf=${result.confidence} method=${result.method} roi=${roi.label} skin=${(roi.skinRatio * 100).toFixed(0)}%`);
+      }
+
       const acSig = detrend(movingAvg(gBuf.current, SMOOTH_WIN));
       const acFiltered = butterworthBandpass(acSig, actualFps, FL, FH);
       const acBpm = autocorrelationBPM(acFiltered, actualFps);
@@ -812,17 +847,21 @@ export function useHeartbeat(
       let totalConf = Math.min(98, result.confidence + bonusConf);
 
       const skinQuality = clamp(roi.skinRatio, 0, 1);
-      totalConf = Math.round(totalConf * (0.5 + skinQuality * 0.5));
-
-      if (motionDecay.current > 0) {
-        totalConf = Math.round(totalConf * (1 - motionDecay.current * 0.06));
+      if (skinQuality < 0.3) {
+        totalConf = Math.round(totalConf * (0.7 + skinQuality));
       }
+
+      if (motionDecay.current > 3) {
+        totalConf = Math.round(totalConf * 0.85);
+      }
+
+      totalConf = Math.max(totalConf, Math.round(result.snr * 5));
 
       confHistory.current.push(totalConf);
       if (confHistory.current.length > 10) confHistory.current.shift();
       const avgConf = Math.round(mean(confHistory.current));
 
-      if (finalRawBpm >= BPM_LO && finalRawBpm <= BPM_HI && avgConf >= 5) {
+      if (finalRawBpm >= BPM_LO && finalRawBpm <= BPM_HI && avgConf >= 3) {
         bpmHistory.current.push(finalRawBpm);
         if (bpmHistory.current.length > HISTORY_LEN) bpmHistory.current.shift();
 
@@ -830,7 +869,7 @@ export function useHeartbeat(
         cleaned = madFilter(cleaned);
 
         if (bpmRef.current === null) {
-          if (cleaned.length >= 2) {
+          if (cleaned.length >= 1) {
             const sorted = [...cleaned].sort((a, b) => a - b);
             bpmRef.current = sorted[Math.floor(sorted.length / 2)];
           }
