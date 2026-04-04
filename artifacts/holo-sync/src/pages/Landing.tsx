@@ -4,9 +4,10 @@ import type { Domain } from "../data/questions";
 
 interface LandingProps {
   onStart: (domain: Domain) => void;
+  onOpenIdea?: () => void;
 }
 
-export default function Landing({ onStart }: LandingProps) {
+export default function Landing({ onStart, onOpenIdea }: LandingProps) {
   const [selected, setSelected] = useState<Domain | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
 
@@ -62,6 +63,21 @@ export default function Landing({ onStart }: LandingProps) {
             <span className="border border-cyan-500/20 rounded px-2 py-1">Cross-Fire Panel Mode</span>
             <span className="border border-cyan-500/20 rounded px-2 py-1">Bluff Detector</span>
           </div>
+
+          {onOpenIdea && (
+            <button
+              onClick={onOpenIdea}
+              className="mt-2 px-6 py-2.5 rounded-xl font-bold text-sm uppercase tracking-widest transition-all duration-300 cursor-pointer"
+              style={{
+                background: "linear-gradient(135deg, rgba(119,0,255,0.2), rgba(0,212,255,0.15))",
+                border: "2px solid rgba(119,0,255,0.5)",
+                color: "#a855f7",
+                boxShadow: "0 0 15px rgba(119,0,255,0.15)",
+              }}
+            >
+              Idea Tab — PPT Submission
+            </button>
+          )}
         </div>
 
         <div className="w-full">

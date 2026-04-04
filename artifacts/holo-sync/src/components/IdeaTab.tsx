@@ -5,19 +5,21 @@ interface IdeaTabProps {
 }
 
 export default function IdeaTab({ onBack }: IdeaTabProps) {
-  const [title, setTitle] = useState("");
+  const [problem, setProblem] = useState("");
+  const [approach, setApproach] = useState("");
   const [description, setDescription] = useState("");
-  const [teamMembers, setTeamMembers] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  const isValid = problem.trim() && approach.trim() && description.trim();
+
   const handleSubmit = () => {
-    if (!title.trim() || !description.trim()) return;
+    if (!isValid) return;
     setSubmitted(true);
   };
 
   const handleCopy = () => {
-    const text = `IDEA TITLE: ${title}\n\nDESCRIPTION:\n${description}${teamMembers.trim() ? `\n\nTEAM MEMBERS:\n${teamMembers}` : ""}`;
+    const text = `PROBLEM:\n${problem}\n\nAPPROACH:\n${approach}\n\nDESCRIPTION:\n${description}`;
     navigator.clipboard.writeText(text).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -25,9 +27,9 @@ export default function IdeaTab({ onBack }: IdeaTabProps) {
   };
 
   const handleReset = () => {
-    setTitle("");
+    setProblem("");
+    setApproach("");
     setDescription("");
-    setTeamMembers("");
     setSubmitted(false);
   };
 
@@ -75,7 +77,7 @@ export default function IdeaTab({ onBack }: IdeaTabProps) {
             IDEA TAB
           </h1>
           <p className="text-cyan-300/60 text-sm max-w-lg">
-            Paste your idea title and description below for the PPT submission
+            Paste your problem, approach, and description below
           </p>
         </div>
 
@@ -83,14 +85,27 @@ export default function IdeaTab({ onBack }: IdeaTabProps) {
           <div className="w-full flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-mono text-cyan-400/70 uppercase tracking-widest">
-                Idea Title
+                Problem
               </label>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Enter your project idea title..."
-                className="w-full px-4 py-3 rounded-xl border border-gray-700/60 bg-gray-900/60 text-white placeholder-gray-500 font-mono text-sm focus:border-cyan-500/60 focus:outline-none focus:ring-1 focus:ring-cyan-500/30 transition-all"
+              <textarea
+                value={problem}
+                onChange={(e) => setProblem(e.target.value)}
+                placeholder="What problem does your idea solve?"
+                rows={3}
+                className="w-full px-4 py-3 rounded-xl border border-gray-700/60 bg-gray-900/60 text-white placeholder-gray-500 font-mono text-sm focus:border-cyan-500/60 focus:outline-none focus:ring-1 focus:ring-cyan-500/30 transition-all resize-none"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-mono text-cyan-400/70 uppercase tracking-widest">
+                Approach
+              </label>
+              <textarea
+                value={approach}
+                onChange={(e) => setApproach(e.target.value)}
+                placeholder="How do you plan to solve this problem? What is your approach?"
+                rows={3}
+                className="w-full px-4 py-3 rounded-xl border border-gray-700/60 bg-gray-900/60 text-white placeholder-gray-500 font-mono text-sm focus:border-cyan-500/60 focus:outline-none focus:ring-1 focus:ring-cyan-500/30 transition-all resize-none"
               />
             </div>
 
@@ -101,44 +116,26 @@ export default function IdeaTab({ onBack }: IdeaTabProps) {
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Describe your idea in detail — what problem it solves, how it works, key features..."
-                rows={6}
+                placeholder="Describe your idea in detail — key features, how it works, technologies used..."
+                rows={5}
                 className="w-full px-4 py-3 rounded-xl border border-gray-700/60 bg-gray-900/60 text-white placeholder-gray-500 font-mono text-sm focus:border-cyan-500/60 focus:outline-none focus:ring-1 focus:ring-cyan-500/30 transition-all resize-none"
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-mono text-cyan-400/70 uppercase tracking-widest">
-                Team Members <span className="text-gray-500">(optional)</span>
-              </label>
-              <input
-                type="text"
-                value={teamMembers}
-                onChange={(e) => setTeamMembers(e.target.value)}
-                placeholder="e.g. Ravi, Priya, Ankit"
-                className="w-full px-4 py-3 rounded-xl border border-gray-700/60 bg-gray-900/60 text-white placeholder-gray-500 font-mono text-sm focus:border-cyan-500/60 focus:outline-none focus:ring-1 focus:ring-cyan-500/30 transition-all"
               />
             </div>
 
             <button
               onClick={handleSubmit}
-              disabled={!title.trim() || !description.trim()}
+              disabled={!isValid}
               className="w-full py-3.5 rounded-xl font-bold text-sm uppercase tracking-widest transition-all duration-300 cursor-pointer mt-2"
               style={{
-                background:
-                  title.trim() && description.trim()
-                    ? "linear-gradient(135deg, rgba(0,212,255,0.2), rgba(119,0,255,0.2))"
-                    : "rgba(50,50,50,0.3)",
-                border:
-                  title.trim() && description.trim()
-                    ? "2px solid rgba(0,212,255,0.6)"
-                    : "2px solid rgba(80,80,80,0.3)",
-                color: title.trim() && description.trim() ? "#00d4ff" : "#555",
-                boxShadow:
-                  title.trim() && description.trim()
-                    ? "0 0 20px rgba(0,212,255,0.15)"
-                    : "none",
-                cursor: title.trim() && description.trim() ? "pointer" : "not-allowed",
+                background: isValid
+                  ? "linear-gradient(135deg, rgba(0,212,255,0.2), rgba(119,0,255,0.2))"
+                  : "rgba(50,50,50,0.3)",
+                border: isValid
+                  ? "2px solid rgba(0,212,255,0.6)"
+                  : "2px solid rgba(80,80,80,0.3)",
+                color: isValid ? "#00d4ff" : "#555",
+                boxShadow: isValid ? "0 0 20px rgba(0,212,255,0.15)" : "none",
+                cursor: isValid ? "pointer" : "not-allowed",
               }}
             >
               Submit Idea
@@ -171,9 +168,20 @@ export default function IdeaTab({ onBack }: IdeaTabProps) {
 
               <div>
                 <div className="text-xs font-mono text-cyan-400/50 uppercase tracking-widest mb-1">
-                  Title
+                  Problem
                 </div>
-                <div className="text-white font-bold text-lg">{title}</div>
+                <div className="text-gray-300 text-sm font-mono leading-relaxed whitespace-pre-wrap">
+                  {problem}
+                </div>
+              </div>
+
+              <div>
+                <div className="text-xs font-mono text-cyan-400/50 uppercase tracking-widest mb-1">
+                  Approach
+                </div>
+                <div className="text-gray-300 text-sm font-mono leading-relaxed whitespace-pre-wrap">
+                  {approach}
+                </div>
               </div>
 
               <div>
@@ -184,15 +192,6 @@ export default function IdeaTab({ onBack }: IdeaTabProps) {
                   {description}
                 </div>
               </div>
-
-              {teamMembers.trim() && (
-                <div>
-                  <div className="text-xs font-mono text-cyan-400/50 uppercase tracking-widest mb-1">
-                    Team Members
-                  </div>
-                  <div className="text-gray-300 text-sm font-mono">{teamMembers}</div>
-                </div>
-              )}
             </div>
 
             <div className="flex gap-3">
