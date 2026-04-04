@@ -1,0 +1,9 @@
+[build]
+  base = "artifacts/holo-sync-deck"
+  command = "pnpm --filter @workspace/holo-sync-deck... run build"
+  publish = "artifacts/holo-sync-deck/dist"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
