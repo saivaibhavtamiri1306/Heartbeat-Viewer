@@ -1,6 +1,6 @@
 [build]
   command = "pnpm --filter @workspace/holo-sync-deck... run build"
-  publish = "artifacts/holo-sync-deck/dist"
+  publish = "dist"
 
 [[redirects]]
   from = "/*"
