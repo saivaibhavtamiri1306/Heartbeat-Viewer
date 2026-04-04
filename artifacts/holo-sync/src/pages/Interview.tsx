@@ -594,7 +594,7 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-[#000408]">
       {/* ── Top Bar ─────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-cyan-500/20 bg-black/80 backdrop-blur-sm z-10 shrink-0">
+      <div className="flex items-center justify-between px-4 py-2 border-b bg-black/90 backdrop-blur-sm z-10 shrink-0" style={{ borderColor: "rgba(0,212,255,0.4)", boxShadow: "0 0 20px rgba(0,212,255,0.2)" }}>
         <div className="flex items-center gap-3">
           <div className="text-sm font-black font-mono"
             style={{ background: "linear-gradient(135deg,#00d4ff,#7700ff)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
@@ -657,7 +657,7 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
       <div className="flex-1 flex overflow-hidden min-h-0">
 
         {/* Left Sidebar */}
-        <div className="w-64 shrink-0 flex flex-col gap-2 p-2 border-r border-cyan-500/20 overflow-y-auto">
+        <div className="w-64 shrink-0 flex flex-col gap-2 p-2 overflow-y-auto" style={{ borderRight: "2px solid rgba(0,212,255,0.4)", boxShadow: "inset -20px 0 40px rgba(0,212,255,0.1)" }}>
           <WebcamFeed
             videoRef={videoRef}
             isActive={camActive}
@@ -684,7 +684,7 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
           <EyeContactIndicator data={eyeContact} />
 
           {/* Live Scores */}
-          <div className="flex flex-col gap-2 p-3 rounded-lg border border-cyan-500/20 bg-black/30">
+          <div className="flex flex-col gap-2 p-3 rounded-xl" style={{ border: "1.5px solid rgba(0,212,255,0.5)", background: "rgba(0,20,40,0.6)", boxShadow: "0 0 20px rgba(0,212,255,0.2), inset 0 0 20px rgba(0,212,255,0.05)" }}>
             <div className="text-xs font-mono text-cyan-400/60 uppercase tracking-widest mb-1">Live Scores</div>
             {[
               { label: "Communication", value: score.communication, color: "#00d4ff" },
@@ -712,7 +712,8 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
         </div>
 
         {/* Center — Avatar */}
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col min-w-0 relative">
+          <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at center, rgba(0,212,255,0.05) 0%, transparent 70%)" }} />
           <div className="flex-1 relative overflow-hidden">
             <Avatar3D
               emotion={avatarEmotion}
@@ -757,7 +758,7 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
           </div>
 
           {/* ── Input Bar ─────────────────────────────────────────── */}
-          <div className="shrink-0 p-3 border-t border-cyan-500/20 bg-black/60">
+          <div className="shrink-0 p-3 bg-black/80" style={{ borderTop: "1.5px solid rgba(0,212,255,0.4)", boxShadow: "0 -10px 30px rgba(0,212,255,0.1)" }}>
             {/* Mic live indicator */}
             {micOn && (
               <div className="flex items-center gap-2 mb-2 px-1">
@@ -871,8 +872,8 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
         </div>
 
         {/* Right — Chat + Analytics */}
-        <div className="w-80 shrink-0 flex flex-col border-l border-cyan-500/20">
-          <div className="px-3 py-2 border-b border-cyan-500/20 flex items-center gap-2">
+        <div className="w-80 shrink-0 flex flex-col" style={{ borderLeft: "2px solid rgba(0,212,255,0.4)", boxShadow: "inset 20px 0 40px rgba(0,212,255,0.1)" }}>
+          <div className="px-3 py-2 flex items-center gap-2" style={{ borderBottom: "1.5px solid rgba(0,212,255,0.4)", boxShadow: "0 0 15px rgba(0,212,255,0.15)" }}>
             <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
             <span className="text-xs font-mono text-cyan-400/60 uppercase tracking-widest">Session Transcript</span>
           </div>
@@ -881,7 +882,7 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
           </div>
 
           {/* Student Analytics */}
-          <div className="shrink-0 p-2 border-t border-cyan-500/20">
+          <div className="shrink-0 p-2" style={{ borderTop: "1.5px solid rgba(0,212,255,0.4)", boxShadow: "inset 0 10px 20px rgba(0,212,255,0.05)" }}>
             <StudentAnalytics
               analytics={speech.analytics}
               isListening={speech.isListening}
@@ -891,7 +892,7 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
           </div>
 
           {phase === "ended" && (
-            <div className="shrink-0 p-3 border-t border-cyan-500/20 flex flex-col gap-2">
+            <div className="shrink-0 p-3 flex flex-col gap-2" style={{ borderTop: "1.5px solid rgba(0,212,255,0.4)", boxShadow: "inset 0 10px 20px rgba(0,212,255,0.05)" }}>
               <button onClick={() => setShowReport(true)}
                 className="w-full py-2.5 rounded-lg font-bold text-sm uppercase tracking-widest transition-all"
                 style={{ background: "rgba(119,0,255,0.15)", border: "1px solid rgba(119,0,255,0.4)", color: "#7700ff" }}>
