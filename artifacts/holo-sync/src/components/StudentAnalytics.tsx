@@ -59,15 +59,18 @@ export default function StudentAnalytics({ analytics, isListening, answerCount, 
   const confColor = analytics.confidenceScore > 70 ? "#00ff88" : analytics.confidenceScore > 40 ? "#ffaa00" : "#ff4444";
 
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-cyan-500/20 bg-black/60 backdrop-blur-md overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 pt-2.5">
-        <span className="text-xs font-mono text-cyan-400/70 uppercase tracking-widest">
+    <div className="glass-panel flex flex-col gap-2 rounded-2xl overflow-hidden">
+      <div className="flex items-center justify-between px-3 pt-3">
+        <span className="text-[10px] font-mono uppercase tracking-[0.2em]" style={{ color: "rgba(0, 212, 255, 0.45)" }}>
           Student Analytics
         </span>
-        <div className={`flex items-center gap-1 text-xs font-mono ${isListening ? "text-green-400" : "text-cyan-600/50"}`}>
-          <div className={`w-1.5 h-1.5 rounded-full ${isListening ? "bg-green-400 animate-pulse" : "bg-gray-600"}`} />
-          {isListening ? "LIVE" : "IDLE"}
+        <div className="flex items-center gap-1.5">
+          <div className={`w-1.5 h-1.5 rounded-full ${isListening ? "bg-green-400 animate-pulse" : "bg-gray-700"}`}
+            style={{ boxShadow: isListening ? "0 0 6px #00ff88" : "none" }} />
+          <span className="text-[10px] font-mono uppercase tracking-[0.1em]"
+            style={{ color: isListening ? "#00ff88" : "rgba(100, 120, 140, 0.4)" }}>
+            {isListening ? "LIVE" : "IDLE"}
+          </span>
         </div>
       </div>
 
@@ -86,17 +89,17 @@ export default function StudentAnalytics({ analytics, isListening, answerCount, 
           { label: "Fillers", value: analytics.fillerCount, bad: analytics.fillerCount > 5 },
           { label: `${mins}m${secs.toString().padStart(2,"0")}s`, value: null, label2: "Time" },
         ].map((stat, i) => (
-          <div key={i} className="bg-black/40 rounded-lg px-2 py-1.5 border border-cyan-500/10">
+          <div key={i} className="rounded-xl px-2 py-1.5" style={{ background: "rgba(6, 12, 24, 0.5)", border: "1px solid rgba(0, 212, 255, 0.06)" }}>
             {stat.value !== null ? (
-              <div className={`text-sm font-black font-mono ${stat.bad ? "text-red-400" : "text-cyan-300"}`}>
+              <div className="text-sm font-black font-mono" style={{ color: stat.bad ? "#ff4444" : "rgba(0, 212, 255, 0.8)" }}>
                 {stat.value}
               </div>
             ) : (
-              <div className="text-xs font-black font-mono text-purple-400">
+              <div className="text-xs font-black font-mono" style={{ color: "#a855f7" }}>
                 {stat.label}
               </div>
             )}
-            <div className="text-xs font-mono text-cyan-600/50 uppercase tracking-wider" style={{ fontSize: "8px" }}>
+            <div className="font-mono uppercase tracking-[0.1em]" style={{ fontSize: "8px", color: "rgba(0, 212, 255, 0.3)" }}>
               {stat.value !== null ? stat.label : stat.label2}
             </div>
           </div>
@@ -106,17 +109,17 @@ export default function StudentAnalytics({ analytics, isListening, answerCount, 
       {/* Filler word badges */}
       {analytics.fillerWords.length > 0 && (
         <div className="px-3 pb-2.5">
-          <div className="text-xs font-mono text-cyan-600/50 uppercase tracking-widest mb-1" style={{ fontSize: "9px" }}>
+          <div className="font-mono uppercase tracking-[0.15em] mb-1" style={{ fontSize: "9px", color: "rgba(0, 212, 255, 0.3)" }}>
             Detected Fillers
           </div>
           <div className="flex flex-wrap gap-1">
             {analytics.fillerWords.slice(0, 6).map((w) => (
               <span
                 key={w}
-                className="text-xs font-mono px-1.5 py-0.5 rounded"
+                className="font-mono px-1.5 py-0.5 rounded-lg"
                 style={{
-                  background: `${FILLER_COLORS[w] || "#ff4444"}22`,
-                  border: `1px solid ${FILLER_COLORS[w] || "#ff4444"}44`,
+                  background: `${FILLER_COLORS[w] || "#ff4444"}0D`,
+                  border: `1px solid ${FILLER_COLORS[w] || "#ff4444"}20`,
                   color: FILLER_COLORS[w] || "#ff4444",
                   fontSize: "9px",
                 }}
@@ -125,7 +128,7 @@ export default function StudentAnalytics({ analytics, isListening, answerCount, 
               </span>
             ))}
             {analytics.fillerWords.length > 6 && (
-              <span className="text-xs font-mono text-cyan-600/40" style={{ fontSize: "9px" }}>
+              <span className="font-mono" style={{ fontSize: "9px", color: "rgba(0, 212, 255, 0.25)" }}>
                 +{analytics.fillerWords.length - 6} more
               </span>
             )}
@@ -133,13 +136,12 @@ export default function StudentAnalytics({ analytics, isListening, answerCount, 
         </div>
       )}
 
-      {/* Coaching tip */}
       {analytics.wordCount > 30 && (
-        <div className="mx-3 mb-2.5 px-2 py-1.5 rounded-lg bg-cyan-500/5 border border-cyan-500/15">
-          <div className="text-xs font-mono text-cyan-400/60 uppercase tracking-widest mb-0.5" style={{ fontSize: "9px" }}>
+        <div className="mx-3 mb-2.5 px-2.5 py-2 rounded-xl" style={{ background: "rgba(0, 212, 255, 0.03)", border: "1px solid rgba(0, 212, 255, 0.08)" }}>
+          <div className="font-mono uppercase tracking-[0.15em] mb-0.5" style={{ fontSize: "9px", color: "rgba(0, 212, 255, 0.4)" }}>
             AI Coach
           </div>
-          <div className="text-xs font-mono text-cyan-300/80 leading-relaxed" style={{ fontSize: "10px" }}>
+          <div className="font-mono leading-relaxed" style={{ fontSize: "10px", color: "rgba(180, 220, 255, 0.6)" }}>
             {analytics.confidenceScore < 40
               ? "Reduce filler words — pause instead of saying 'um'."
               : analytics.wpm > 150

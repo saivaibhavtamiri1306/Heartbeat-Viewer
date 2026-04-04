@@ -162,22 +162,26 @@ export default function HeartbeatMonitor({ data, onPanic, onCalm }: HeartbeatMon
     "→";
 
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-cyan-500/25 bg-black/60 backdrop-blur-md overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 pt-2.5">
+    <div className="glass-panel flex flex-col gap-2 rounded-2xl overflow-hidden">
+      <div className="flex items-center justify-between px-3 pt-3">
         <div className="flex items-center gap-2">
           <div
             className="text-base animate-heartbeat leading-none"
-            style={{ color: stressColor, filter: `drop-shadow(0 0 6px ${stressColor})` }}
+            style={{ color: stressColor, filter: `drop-shadow(0 0 8px ${stressColor})` }}
           >
             ♥
           </div>
-          <span className="text-xs font-mono text-cyan-400/70 uppercase tracking-widest">
+          <span className="text-[10px] font-mono uppercase tracking-[0.2em]" style={{ color: "rgba(0, 212, 255, 0.45)" }}>
             Biometric Monitor
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs font-mono uppercase tracking-widest" style={{ color: stressColor }}>
+          <span className="text-[10px] font-mono uppercase tracking-[0.15em] px-2 py-0.5 rounded-full"
+            style={{
+              color: stressColor,
+              background: `${stressColor}10`,
+              border: `1px solid ${stressColor}25`,
+            }}>
             {data.isActive ? stressLabel : "OFFLINE"}
           </span>
         </div>
@@ -223,10 +227,10 @@ export default function HeartbeatMonitor({ data, onPanic, onCalm }: HeartbeatMon
               >
                 {displayBpm}
               </div>
-              <div className="text-xs text-cyan-500/60 font-mono uppercase tracking-widest mt-1">BPM</div>
+              <div className="font-mono uppercase tracking-[0.2em] mt-1" style={{ fontSize: "9px", color: "rgba(0, 212, 255, 0.35)" }}>BPM</div>
               <div className="flex items-center gap-1 mt-1">
                 <span className="text-xs font-mono" style={{ color: stressColor }}>{trendIcon}</span>
-                <span className="text-xs font-mono text-cyan-600">
+                <span className="text-[10px] font-mono" style={{ color: "rgba(0, 212, 255, 0.4)" }}>
                   {data.trend.toUpperCase()}
                 </span>
               </div>
@@ -246,15 +250,14 @@ export default function HeartbeatMonitor({ data, onPanic, onCalm }: HeartbeatMon
         </div>
       </div>
 
-      {/* Signal Quality Bar */}
       <div className="px-3">
-        <div className="flex justify-between text-xs font-mono mb-1">
-          <span className="text-cyan-600/70 uppercase tracking-widest">Signal Quality</span>
-          <span style={{ color: data.confidence > 60 ? "#00d4ff" : data.confidence > 30 ? "#ffaa00" : "#ff4444" }}>
+        <div className="flex justify-between font-mono mb-1">
+          <span className="text-[10px] uppercase tracking-[0.15em]" style={{ color: "rgba(0, 212, 255, 0.35)" }}>Signal Quality</span>
+          <span className="text-[10px] tabular-nums" style={{ color: data.confidence > 60 ? "#00d4ff" : data.confidence > 30 ? "#ffaa00" : "#ff4444" }}>
             {data.isActive ? `${data.confidence}%` : "---"}
           </span>
         </div>
-        <div className="h-1 rounded-full bg-gray-900 overflow-hidden">
+        <div className="h-1 rounded-full overflow-hidden" style={{ background: "rgba(20, 30, 50, 0.6)" }}>
           <div
             className="h-full rounded-full transition-all duration-700"
             style={{
@@ -266,14 +269,13 @@ export default function HeartbeatMonitor({ data, onPanic, onCalm }: HeartbeatMon
         </div>
       </div>
 
-      {/* BPM Gauge */}
       <div className="px-3">
-        <div className="flex justify-between text-xs font-mono mb-1">
-          <span className="text-cyan-600/50 font-mono">40</span>
-          <span className="text-cyan-600/70 uppercase tracking-widest text-center">Heart Rate Range</span>
-          <span className="text-cyan-600/50 font-mono">180</span>
+        <div className="flex justify-between font-mono mb-1">
+          <span className="text-[10px] tabular-nums" style={{ color: "rgba(0, 212, 255, 0.25)" }}>40</span>
+          <span className="text-[10px] uppercase tracking-[0.15em] text-center" style={{ color: "rgba(0, 212, 255, 0.35)" }}>Heart Rate Range</span>
+          <span className="text-[10px] tabular-nums" style={{ color: "rgba(0, 212, 255, 0.25)" }}>180</span>
         </div>
-        <div className="h-2 rounded-full bg-gray-900 overflow-hidden relative">
+        <div className="h-2 rounded-full overflow-hidden relative" style={{ background: "rgba(20, 30, 50, 0.6)" }}>
           {/* Zone markers */}
           <div className="absolute inset-y-0 left-[15%] right-[33%] bg-green-500/10" />
           <div className="absolute inset-y-0 left-[43%] right-[18%] bg-yellow-500/10" />
@@ -287,49 +289,52 @@ export default function HeartbeatMonitor({ data, onPanic, onCalm }: HeartbeatMon
             }}
           />
         </div>
-        <div className="flex justify-between text-xs font-mono mt-0.5 text-cyan-700/50">
+        <div className="flex justify-between font-mono mt-0.5" style={{ fontSize: "8px", color: "rgba(0, 212, 255, 0.2)" }}>
           <span>REST</span>
           <span>MODERATE</span>
           <span>HIGH</span>
         </div>
       </div>
 
-      {/* Info Row */}
-      <div className="flex items-center justify-between px-3 pb-2.5 text-xs font-mono text-cyan-700/60">
+      <div className="flex items-center justify-between px-3 pb-2.5 font-mono" style={{ fontSize: "9px" }}>
         <span className="flex items-center gap-1">
-          <span className="text-cyan-500/50">ALGO</span>
-          <span className="text-cyan-400/70 font-bold">{data.algorithm}</span>
+          <span style={{ color: "rgba(0, 212, 255, 0.25)" }}>ALGO</span>
+          <span style={{ color: "rgba(0, 212, 255, 0.5)" }}>{data.algorithm}</span>
         </span>
         <span className="flex items-center gap-1">
-          <span className="text-cyan-500/50">FPS</span>
-          <span className="text-cyan-400/70">{data.frameRate}</span>
+          <span style={{ color: "rgba(0, 212, 255, 0.25)" }}>FPS</span>
+          <span style={{ color: "rgba(0, 212, 255, 0.5)" }}>{data.frameRate}</span>
         </span>
-        <span className={`flex items-center gap-1 ${data.faceDetected ? "text-green-500/70" : "text-red-500/60"}`}>
-          <span className={`w-1.5 h-1.5 rounded-full ${data.faceDetected ? "bg-green-500 animate-pulse" : "bg-red-500"}`} />
-          {data.faceDetected ? "FACE OK" : "NO FACE"}
+        <span className="flex items-center gap-1">
+          <span className={`w-1.5 h-1.5 rounded-full ${data.faceDetected ? "animate-pulse" : ""}`}
+            style={{ background: data.faceDetected ? "#00ff88" : "#ff4444", boxShadow: data.faceDetected ? "0 0 4px #00ff88" : "none" }} />
+          <span style={{ color: data.faceDetected ? "rgba(0, 255, 136, 0.6)" : "rgba(255, 68, 68, 0.6)" }}>
+            {data.faceDetected ? "FACE OK" : "NO FACE"}
+          </span>
         </span>
-        <span className={data.isActive ? "text-green-500/70" : "text-red-500/60"}>
-          {data.isActive ? "● LIVE" : "○ OFF"}
+        <span style={{ color: data.isActive ? "rgba(0, 255, 136, 0.6)" : "rgba(255, 68, 68, 0.6)" }}>
+          {data.isActive ? "LIVE" : "OFF"}
         </span>
       </div>
 
-      {/* Demo controls */}
       {(onPanic || onCalm) && (
-        <div className="flex gap-1 px-3 pb-2.5">
+        <div className="flex gap-1.5 px-3 pb-2.5">
           {onPanic && (
             <button
               onClick={onPanic}
-              className="flex-1 text-xs font-bold font-mono uppercase tracking-widest text-red-400 border border-red-400/30 rounded-lg px-2 py-1.5 hover:bg-red-400/10 active:bg-red-400/20 transition-colors"
+              className="flex-1 font-bold font-mono uppercase tracking-[0.1em] rounded-xl px-2 py-1.5 transition-all duration-300 cursor-pointer"
+              style={{ fontSize: "9px", color: "#ff4444", background: "rgba(255,68,68,0.06)", border: "1px solid rgba(255,68,68,0.15)" }}
             >
-              ⚠ Stress Demo
+              Stress Demo
             </button>
           )}
           {onCalm && (
             <button
               onClick={onCalm}
-              className="flex-1 text-xs font-bold font-mono uppercase tracking-widest text-green-400 border border-green-400/30 rounded-lg px-2 py-1.5 hover:bg-green-400/10 active:bg-green-400/20 transition-colors"
+              className="flex-1 font-bold font-mono uppercase tracking-[0.1em] rounded-xl px-2 py-1.5 transition-all duration-300 cursor-pointer"
+              style={{ fontSize: "9px", color: "#00ff88", background: "rgba(0,255,136,0.06)", border: "1px solid rgba(0,255,136,0.15)" }}
             >
-              ↓ Calm Demo
+              Calm Demo
             </button>
           )}
         </div>

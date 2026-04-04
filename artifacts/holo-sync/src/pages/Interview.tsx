@@ -566,62 +566,72 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
   const isInputEmpty = !userInput.trim() && !speech.interimText.trim();
 
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden bg-[#000408]">
+    <div className="h-screen w-screen flex flex-col overflow-hidden" style={{ background: "linear-gradient(180deg, #020610 0%, #040a14 100%)" }}>
       {/* ── Top Bar ─────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-4 py-2 border-b bg-black/90 backdrop-blur-sm z-10 shrink-0" style={{ borderColor: "rgba(0,212,255,0.4)", boxShadow: "0 0 20px rgba(0,212,255,0.2)" }}>
+      <div className="status-bar flex items-center justify-between px-4 py-2.5 z-10 shrink-0">
         <div className="flex items-center gap-3">
-          <div className="text-sm font-black font-mono"
-            style={{ background: "linear-gradient(135deg,#00d4ff,#7700ff)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+          <div className="text-sm font-black font-mono gradient-text">
             HOLO-SYNC
           </div>
-          <div className="h-4 w-px bg-cyan-500/30" />
-          <span className="text-xs font-mono uppercase tracking-widest font-bold" style={{ color: domain.color }}>
+          <div className="h-4 w-px" style={{ background: "rgba(0, 212, 255, 0.15)" }} />
+          <span className="text-[11px] font-mono uppercase tracking-[0.12em] font-bold" style={{ color: domain.color }}>
             {domain.icon} {domain.label}
           </span>
-          <span className={`text-xs font-mono uppercase tracking-widest border rounded px-1.5 py-0.5 ${
-            config.difficulty === "easy" ? "text-green-400 border-green-400/30" :
-            config.difficulty === "hard" ? "text-red-400 border-red-400/30" :
-            "text-yellow-400 border-yellow-400/30"
-          }`}>
+          <span className={`text-[10px] font-mono uppercase tracking-[0.1em] rounded-full px-2.5 py-0.5 ${
+            config.difficulty === "easy" ? "text-green-400" :
+            config.difficulty === "hard" ? "text-red-400" :
+            "text-yellow-400"
+          }`} style={{
+            background: config.difficulty === "easy" ? "rgba(0,255,136,0.08)" :
+              config.difficulty === "hard" ? "rgba(255,68,68,0.08)" : "rgba(255,170,0,0.08)",
+            border: `1px solid ${config.difficulty === "easy" ? "rgba(0,255,136,0.2)" :
+              config.difficulty === "hard" ? "rgba(255,68,68,0.2)" : "rgba(255,170,0,0.2)"}`,
+          }}>
             {config.difficulty}
           </span>
           {domain.panelMode && (
-            <span className="text-xs font-mono uppercase tracking-widest text-yellow-400 border border-yellow-400/30 rounded px-1.5 py-0.5">
-              Panel Mode
+            <span className="text-[10px] font-mono uppercase tracking-[0.1em] text-amber-400 rounded-full px-2.5 py-0.5"
+              style={{ background: "rgba(255,170,0,0.06)", border: "1px solid rgba(255,170,0,0.15)" }}>
+              Panel
             </span>
           )}
         </div>
-        <div className="flex items-center gap-3 text-xs font-mono text-cyan-500/70">
+        <div className="flex items-center gap-3 text-xs font-mono" style={{ color: "rgba(0, 212, 255, 0.5)" }}>
           <AnswerTimer
             isActive={waitingForAnswer && phase === "active"}
             maxTime={answerTimeLimit}
             onTimeUp={handleTimeUp}
             difficulty={config.difficulty}
           />
-          <span>{formatTime(elapsedSeconds)}</span>
-          <span>Q {Math.min(currentQuestionIndex + 1, questions.length)}/{questions.length}</span>
+          <span className="tabular-nums">{formatTime(elapsedSeconds)}</span>
+          <span className="tabular-nums">Q {Math.min(currentQuestionIndex + 1, questions.length)}/{questions.length}</span>
           {bluffDetected && (
-            <span className="text-red-400 animate-pulse border border-red-400/30 rounded px-2 py-0.5 uppercase tracking-widest">
-              🔍 Bluff Detected
+            <span className="text-red-400 animate-pulse rounded-full px-2.5 py-0.5 uppercase tracking-[0.1em] text-[10px]"
+              style={{ background: "rgba(255,68,68,0.08)", border: "1px solid rgba(255,68,68,0.2)" }}>
+              🔍 Bluff
             </span>
           )}
           {adaptiveMode === "cooling" && (
-            <span className="text-green-400 animate-pulse border border-green-400/30 rounded px-2 py-0.5 uppercase tracking-widest">
+            <span className="text-green-400 animate-pulse rounded-full px-2.5 py-0.5 uppercase tracking-[0.1em] text-[10px]"
+              style={{ background: "rgba(0,255,136,0.06)", border: "1px solid rgba(0,255,136,0.15)" }}>
               ⬇ Cooling
             </span>
           )}
           {adaptiveMode === "escalating" && (
-            <span className="text-orange-400 animate-pulse border border-orange-400/30 rounded px-2 py-0.5 uppercase tracking-widest">
+            <span className="text-orange-400 animate-pulse rounded-full px-2.5 py-0.5 uppercase tracking-[0.1em] text-[10px]"
+              style={{ background: "rgba(255,170,0,0.06)", border: "1px solid rgba(255,170,0,0.15)" }}>
               ⬆ Escalating
             </span>
           )}
           {empathyMode && (
-            <span className="text-green-400 animate-pulse border border-green-400/30 rounded px-2 py-0.5 uppercase tracking-widest">
-              ♥ Empathy Mode
+            <span className="text-emerald-400 animate-pulse rounded-full px-2.5 py-0.5 uppercase tracking-[0.1em] text-[10px]"
+              style={{ background: "rgba(0,255,136,0.06)", border: "1px solid rgba(0,255,136,0.15)" }}>
+              ♥ Empathy
             </span>
           )}
           <button onClick={onEnd}
-            className="text-red-400 border border-red-400/30 rounded px-2 py-0.5 hover:bg-red-400/10 uppercase tracking-widest transition-colors">
+            className="text-red-400/70 hover:text-red-400 rounded-full px-3 py-1 hover:bg-red-400/10 uppercase tracking-[0.1em] text-[10px] transition-all duration-300 cursor-pointer"
+            style={{ border: "1px solid rgba(255,68,68,0.15)" }}>
             End
           </button>
         </div>
@@ -631,7 +641,7 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
       <div className="flex-1 flex overflow-hidden min-h-0">
 
         {/* Left Sidebar */}
-        <div className="w-64 shrink-0 flex flex-col gap-2 p-2 overflow-y-auto" style={{ borderRight: "2px solid rgba(0,212,255,0.4)", boxShadow: "inset -20px 0 40px rgba(0,212,255,0.1)" }}>
+        <div className="sidebar-panel w-64 shrink-0 flex flex-col gap-2.5 p-2.5 overflow-y-auto" style={{ borderRight: "1px solid rgba(0,212,255,0.12)" }}>
           <WebcamFeed
             videoRef={videoRef}
             isActive={camActive}
@@ -658,28 +668,28 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
           <EyeContactIndicator data={eyeContact} />
 
           {/* Live Scores */}
-          <div className="flex flex-col gap-2 p-3 rounded-xl" style={{ border: "1.5px solid rgba(0,212,255,0.5)", background: "rgba(0,20,40,0.6)", boxShadow: "0 0 20px rgba(0,212,255,0.2), inset 0 0 20px rgba(0,212,255,0.05)" }}>
-            <div className="text-xs font-mono text-cyan-400/60 uppercase tracking-widest mb-1">Live Scores</div>
+          <div className="glass-panel flex flex-col gap-2 p-3 rounded-2xl">
+            <div className="text-[10px] font-mono uppercase tracking-[0.2em] mb-1" style={{ color: "rgba(0, 212, 255, 0.4)" }}>Live Scores</div>
             {[
               { label: "Communication", value: score.communication, color: "#00d4ff" },
               { label: "Technical", value: score.technical, color: "#7700ff" },
               { label: "Composure", value: heartData.stress === "high" ? 30 : heartData.stress === "medium" ? 65 : 100, color: heartData.stress === "high" ? "#ff4444" : "#00ff88" },
             ].map(s => (
               <div key={s.label} className="flex flex-col gap-1">
-                <div className="flex justify-between text-xs font-mono">
-                  <span className="text-gray-400">{s.label}</span>
-                  <span style={{ color: s.color }}>{s.value}%</span>
+                <div className="flex justify-between font-mono">
+                  <span className="text-[10px]" style={{ color: "rgba(160, 180, 200, 0.5)" }}>{s.label}</span>
+                  <span className="text-[10px] tabular-nums" style={{ color: s.color }}>{s.value}%</span>
                 </div>
-                <div className="h-1 rounded-full bg-gray-800">
+                <div className="h-1 rounded-full" style={{ background: "rgba(20, 30, 50, 0.6)" }}>
                   <div className="h-full rounded-full transition-all duration-700"
-                    style={{ width: `${s.value}%`, background: s.color, boxShadow: `0 0 6px ${s.color}66` }} />
+                    style={{ width: `${s.value}%`, background: `linear-gradient(90deg, ${s.color}88, ${s.color})`, boxShadow: `0 0 6px ${s.color}44` }} />
                 </div>
               </div>
             ))}
-            <div className="mt-1 pt-2 border-t border-cyan-500/20">
-              <div className="flex justify-between text-xs font-mono font-bold">
-                <span className="text-cyan-400">Overall</span>
-                <span className="text-cyan-300">{overallScore}%</span>
+            <div className="mt-1.5 pt-2" style={{ borderTop: "1px solid rgba(0, 212, 255, 0.08)" }}>
+              <div className="flex justify-between font-mono font-bold">
+                <span className="text-[10px] uppercase tracking-[0.15em]" style={{ color: "rgba(0, 212, 255, 0.5)" }}>Overall</span>
+                <span className="text-[10px] tabular-nums" style={{ color: "#00d4ff" }}>{overallScore}%</span>
               </div>
             </div>
           </div>
@@ -687,7 +697,7 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
 
         {/* Center — Avatar */}
         <div className="flex-1 flex flex-col min-w-0 relative">
-          <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at center, rgba(0,212,255,0.05) 0%, transparent 70%)" }} />
+          <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at center, rgba(0,212,255,0.04) 0%, rgba(119,0,255,0.02) 40%, transparent 70%)" }} />
           <div className="flex-1 relative overflow-hidden">
             <Avatar3D
               emotion={avatarEmotion}
@@ -702,38 +712,40 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
             />
 
             <div className="absolute top-3 left-3 flex flex-col gap-1 pointer-events-none">
-              <div className="text-xs font-mono text-cyan-400/50 uppercase tracking-widest">3D Holographic Interface</div>
-              <div className="text-xs font-mono text-cyan-500/40">Emotion: {avatarEmotion.toUpperCase()}</div>
+              <div className="text-[10px] font-mono uppercase tracking-[0.2em]" style={{ color: "rgba(0, 212, 255, 0.3)" }}>3D Holographic Interface</div>
+              <div className="text-[10px] font-mono uppercase tracking-[0.15em]" style={{ color: "rgba(0, 212, 255, 0.2)" }}>Emotion: {avatarEmotion.toUpperCase()}</div>
             </div>
 
             {isTyping && (
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/80 border border-cyan-500/30 rounded-full px-4 py-2 z-10">
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-10 rounded-full px-4 py-2"
+                style={{ background: "rgba(4, 8, 16, 0.85)", border: "1px solid rgba(0, 212, 255, 0.2)", backdropFilter: "blur(12px)" }}>
                 <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
-                <span className="text-xs font-mono text-cyan-400 uppercase tracking-widest">Composing response...</span>
+                <span className="text-[10px] font-mono uppercase tracking-[0.15em]" style={{ color: "rgba(0, 212, 255, 0.7)" }}>Composing response...</span>
               </div>
             )}
 
             {isSpeaking && !isTyping && (
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/80 border border-purple-500/30 rounded-full px-4 py-2 z-10">
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-10 rounded-full px-4 py-2"
+                style={{ background: "rgba(4, 8, 16, 0.85)", border: "1px solid rgba(119, 0, 255, 0.2)", backdropFilter: "blur(12px)" }}>
                 <div className="flex gap-0.5">
                   {[0,1,2,3].map(i => (
                     <div key={i} className="w-0.5 bg-purple-400 rounded-full animate-bounce"
                       style={{ height: `${8 + Math.random() * 8}px`, animationDelay: `${i * 0.1}s` }} />
                   ))}
                 </div>
-                <span className="text-xs font-mono text-purple-400 uppercase tracking-widest">Interviewer Speaking...</span>
+                <span className="text-[10px] font-mono uppercase tracking-[0.15em]" style={{ color: "rgba(168, 85, 247, 0.7)" }}>Interviewer Speaking...</span>
               </div>
             )}
 
             {empathyMode && (
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
-                <div className="text-6xl animate-heartbeat opacity-25" style={{ color: "#00ff88" }}>♥</div>
+                <div className="text-6xl animate-heartbeat opacity-20" style={{ color: "#00ff88", filter: "blur(1px)" }}>♥</div>
               </div>
             )}
           </div>
 
           {/* ── Input Bar ─────────────────────────────────────────── */}
-          <div className="shrink-0 p-3 bg-black/80" style={{ borderTop: "1.5px solid rgba(0,212,255,0.4)", boxShadow: "0 -10px 30px rgba(0,212,255,0.1)" }}>
+          <div className="input-bar shrink-0 p-3">
             {/* Mic live indicator */}
             {micOn && (
               <div className="flex items-center gap-2 mb-2 px-1">
@@ -809,9 +821,12 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
                     : "Type your answer, or click mic to speak"
                   }
                   disabled={phase === "ended" || phase === "starting" || isSpeaking}
-                  className="w-full bg-black/60 border border-cyan-500/30 rounded-xl px-4 py-3 text-sm text-cyan-100 font-mono placeholder-cyan-600/40 focus:outline-none focus:border-cyan-400 disabled:opacity-40 transition-colors"
+                  className="w-full rounded-xl px-4 py-3 text-sm font-mono focus:outline-none disabled:opacity-40 transition-all duration-300"
                   style={{
-                    boxShadow: micOn ? "0 0 0 1px rgba(255,68,68,0.3) inset" : undefined,
+                    background: "rgba(6, 12, 24, 0.8)",
+                    border: micOn ? "1px solid rgba(255,68,68,0.25)" : "1px solid rgba(0, 212, 255, 0.12)",
+                    color: "rgba(180, 220, 255, 0.9)",
+                    boxShadow: micOn ? "0 0 0 1px rgba(255,68,68,0.15) inset" : undefined,
                   }}
                 />
                 
@@ -821,15 +836,15 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
               <button
                 onClick={handleSubmitAnswer}
                 disabled={phase === "ended" || phase === "starting" || isSpeaking || isInputEmpty}
-                className="shrink-0 px-5 py-3 rounded-xl font-bold text-sm uppercase tracking-widest transition-all disabled:opacity-40 active:scale-95"
+                className="shrink-0 px-5 py-3 rounded-xl font-bold text-sm uppercase tracking-[0.15em] transition-all duration-300 disabled:opacity-30 active:scale-95 cursor-pointer"
                 style={{
-                  background: "rgba(0,212,255,0.15)",
-                  border: "1px solid rgba(0,212,255,0.4)",
-                  color: "#00d4ff",
-                  boxShadow: !isInputEmpty ? "0 0 12px rgba(0,212,255,0.2)" : undefined,
+                  background: !isInputEmpty ? "rgba(0,212,255,0.1)" : "rgba(30,40,60,0.3)",
+                  border: `1px solid ${!isInputEmpty ? "rgba(0,212,255,0.3)" : "rgba(60,70,90,0.3)"}`,
+                  color: !isInputEmpty ? "#00d4ff" : "rgba(60,80,100,0.5)",
+                  boxShadow: !isInputEmpty ? "0 0 20px rgba(0,212,255,0.1)" : undefined,
                 }}
               >
-                Send ↵
+                Send
               </button>
             </div>
 
@@ -847,17 +862,16 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
         </div>
 
         {/* Right — Chat + Analytics */}
-        <div className="w-80 shrink-0 flex flex-col" style={{ borderLeft: "2px solid rgba(0,212,255,0.4)", boxShadow: "inset 20px 0 40px rgba(0,212,255,0.1)" }}>
-          <div className="px-3 py-2 flex items-center gap-2" style={{ borderBottom: "1.5px solid rgba(0,212,255,0.4)", boxShadow: "0 0 15px rgba(0,212,255,0.15)" }}>
+        <div className="sidebar-panel w-80 shrink-0 flex flex-col" style={{ borderLeft: "1px solid rgba(0,212,255,0.12)" }}>
+          <div className="px-3 py-2.5 flex items-center gap-2" style={{ borderBottom: "1px solid rgba(0,212,255,0.08)" }}>
             <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-            <span className="text-xs font-mono text-cyan-400/60 uppercase tracking-widest">Session Transcript</span>
+            <span className="text-[10px] font-mono uppercase tracking-[0.2em]" style={{ color: "rgba(0, 212, 255, 0.4)" }}>Session Transcript</span>
           </div>
           <div className="flex-1 overflow-hidden">
             <InterviewChat messages={messages} isTyping={isTyping} />
           </div>
 
-          {/* Student Analytics */}
-          <div className="shrink-0 p-2" style={{ borderTop: "1.5px solid rgba(0,212,255,0.4)", boxShadow: "inset 0 10px 20px rgba(0,212,255,0.05)" }}>
+          <div className="shrink-0 p-2.5" style={{ borderTop: "1px solid rgba(0,212,255,0.08)" }}>
             <StudentAnalytics
               analytics={speech.analytics}
               isListening={speech.isListening}
@@ -867,15 +881,15 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
           </div>
 
           {phase === "ended" && (
-            <div className="shrink-0 p-3 flex flex-col gap-2" style={{ borderTop: "1.5px solid rgba(0,212,255,0.4)", boxShadow: "inset 0 10px 20px rgba(0,212,255,0.05)" }}>
+            <div className="shrink-0 p-3 flex flex-col gap-2" style={{ borderTop: "1px solid rgba(0,212,255,0.08)" }}>
               <button onClick={() => setShowReport(true)}
-                className="w-full py-2.5 rounded-lg font-bold text-sm uppercase tracking-widest transition-all"
-                style={{ background: "rgba(119,0,255,0.15)", border: "1px solid rgba(119,0,255,0.4)", color: "#7700ff" }}>
+                className="w-full py-2.5 rounded-xl font-bold text-sm uppercase tracking-[0.15em] transition-all duration-300 cursor-pointer"
+                style={{ background: "rgba(119,0,255,0.08)", border: "1px solid rgba(119,0,255,0.25)", color: "#a855f7" }}>
                 View Full Report
               </button>
               <button onClick={onEnd}
-                className="w-full py-2.5 rounded-lg font-bold text-sm uppercase tracking-widest transition-all"
-                style={{ background: "rgba(0,212,255,0.15)", border: "1px solid rgba(0,212,255,0.4)", color: "#00d4ff" }}>
+                className="w-full py-2.5 rounded-xl font-bold text-sm uppercase tracking-[0.15em] transition-all duration-300 cursor-pointer"
+                style={{ background: "rgba(0,212,255,0.06)", border: "1px solid rgba(0,212,255,0.2)", color: "#00d4ff" }}>
                 Return to Home
               </button>
             </div>

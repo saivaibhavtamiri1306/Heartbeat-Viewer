@@ -259,7 +259,7 @@ interface Avatar3DProps {
   isSpeaking: boolean;
   bpm: number;
   panelMode?: boolean;
-  panelAvatars?: Array<{ name: string; color: string; icon: string }>;
+  panelAvatars?: Array<{ name: string; emotion: string }>;
   activeSpeakerIndex?: number;
   mouthOpenness?: number;
   spokenText?: string;
