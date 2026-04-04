@@ -1,0 +1,31 @@
+kind = "slides"
+previewPath = "/holo-sync-deck/"
+title = "Holo-Sync Project Presentation"
+version = "1.0.0"
+id = "artifacts/holo-sync-deck"
+router = "path"
+
+[[integratedSkills]]
+name = "slides"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/holo-sync-deck/" ]
+localPort = 21077
+
+[services.development]
+run = "pnpm --filter @workspace/holo-sync-deck run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/holo-sync-deck", "run", "build" ]
+publicDir = "artifacts/holo-sync-deck/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21077"
+BASE_PATH = "/holo-sync-deck/"

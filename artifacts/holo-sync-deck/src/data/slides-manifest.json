@@ -1,0 +1,66 @@
+[
+  {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "position": 1,
+    "filepath": "src/pages/slides/TitleSlide.tsx",
+    "title": "Holo-Sync — Universal Biometric Interviewer",
+    "description": "Title slide introducing the project",
+    "speakerNotes": ""
+  },
+  {
+    "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+    "position": 2,
+    "filepath": "src/pages/slides/SystemArchitecture.tsx",
+    "title": "System Architecture",
+    "description": "Technical architecture overview with component diagram",
+    "speakerNotes": ""
+  },
+  {
+    "id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+    "position": 3,
+    "filepath": "src/pages/slides/RPPGPipeline.tsx",
+    "title": "rPPG Heart Rate Pipeline",
+    "description": "Detailed signal processing pipeline for heart rate detection",
+    "speakerNotes": ""
+  },
+  {
+    "id": "d4e5f6a7-b8c9-0123-defa-234567890123",
+    "position": 4,
+    "filepath": "src/pages/slides/InterviewDomains.tsx",
+    "title": "Interview Domains",
+    "description": "Five specialized interview tracks with features",
+    "speakerNotes": ""
+  },
+  {
+    "id": "e5f6a7b8-c9d0-1234-efab-345678901234",
+    "position": 5,
+    "filepath": "src/pages/slides/KeyFeatures.tsx",
+    "title": "Key Features",
+    "description": "Unique features including bluff detector and cross-fire panel",
+    "speakerNotes": ""
+  },
+  {
+    "id": "f6a7b8c9-d0e1-2345-fabc-456789012345",
+    "position": 6,
+    "filepath": "src/pages/slides/DataFlow.tsx",
+    "title": "Interview Data Flow",
+    "description": "Real-time processing flow from webcam to post-interview report",
+    "speakerNotes": ""
+  },
+  {
+    "id": "a7b8c9d0-e1f2-3456-abcd-567890123456",
+    "position": 7,
+    "filepath": "src/pages/slides/TechStack.tsx",
+    "title": "Technology Stack",
+    "description": "Frontend, CV, and AI technologies used",
+    "speakerNotes": ""
+  },
+  {
+    "id": "b8c9d0e1-f2a3-4567-bcde-678901234567",
+    "position": 8,
+    "filepath": "src/pages/slides/ClosingSlide.tsx",
+    "title": "Closing — HOLO-SYNC",
+    "description": "Closing slide with key metrics",
+    "speakerNotes": ""
+  }
+]

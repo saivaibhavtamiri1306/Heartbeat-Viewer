@@ -13,7 +13,7 @@ interface AvatarProps {
   mouthOpenness?: number;
 }
 
-const EMOTION_COLORS = {
+const EMOTION_COLORS: Record<string, { primary: number; secondary: number; emissive: number; label: string }> = {
   neutral:    { primary: 0x00d4ff, secondary: 0x0077ff, emissive: 0x001133, label: "#00d4ff" },
   empathetic: { primary: 0x00ff88, secondary: 0x00cc66, emissive: 0x001122, label: "#00ff88" },
   stern:      { primary: 0xff3333, secondary: 0xcc1111, emissive: 0x220000, label: "#ff3333" },
@@ -23,7 +23,7 @@ const EMOTION_COLORS = {
 
 const HEAD_MODEL_URL = "/head.glb";
 
-function AmbientParticles({ color, count = 400 }: { color: number; count?: number }) {
+function AmbientParticles({ color, count = 300 }: { color: number; count?: number }) {
   const ref = useRef<THREE.Points>(null);
   const positions = useMemo(() => {
     const arr = new Float32Array(count * 3);
@@ -32,7 +32,7 @@ function AmbientParticles({ color, count = 400 }: { color: number; count?: numbe
       const phi = Math.acos(2 * Math.random() - 1);
       const r = 2.5 + Math.random() * 3;
       arr[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-      arr[i * 3 + 1] = r * Math.cos(phi) + (Math.random() - 0.5) * 2;
+      arr[i * 3 + 1] = r * Math.cos(phi);
       arr[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
     }
     return arr;
@@ -40,9 +40,7 @@ function AmbientParticles({ color, count = 400 }: { color: number; count?: numbe
 
   useFrame((s) => {
     if (ref.current) {
-      ref.current.rotation.y = s.clock.elapsedTime * 0.012;
-      (ref.current.material as THREE.PointsMaterial).opacity =
-        0.2 + Math.sin(s.clock.elapsedTime * 0.7) * 0.08;
+      ref.current.rotation.y = s.clock.elapsedTime * 0.015;
     }
   });
 
@@ -51,53 +49,18 @@ function AmbientParticles({ color, count = 400 }: { color: number; count?: numbe
       <bufferGeometry>
         <bufferAttribute attach="attributes-position" args={[positions, 3]} />
       </bufferGeometry>
-      <pointsMaterial
-        size={0.01}
-        color={color}
-        transparent
-        opacity={0.2}
-        sizeAttenuation
-        depthWrite={false}
-        blending={THREE.AdditiveBlending}
-      />
+      <pointsMaterial size={0.008} color={color} transparent opacity={0.15} sizeAttenuation depthWrite={false} blending={THREE.AdditiveBlending} />
     </points>
   );
 }
 
-function SubtleRings({ color }: { color: number }) {
-  const r1 = useRef<THREE.Mesh>(null);
-  const r2 = useRef<THREE.Mesh>(null);
-
-  useFrame((s) => {
-    const t = s.clock.elapsedTime;
-    if (r1.current) r1.current.rotation.z = t * 0.1;
-    if (r2.current) r2.current.rotation.z = -t * 0.07;
-  });
-
-  return (
-    <group position={[0, -1.6, 0]}>
-      <mesh ref={r1} rotation={[Math.PI / 2, 0, 0]}>
-        <torusGeometry args={[1.0, 0.004, 4, 64]} />
-        <meshBasicMaterial color={color} transparent opacity={0.1} blending={THREE.AdditiveBlending} />
-      </mesh>
-      <mesh ref={r2} rotation={[Math.PI / 2.05, 0.06, 0]}>
-        <torusGeometry args={[1.12, 0.003, 4, 64]} />
-        <meshBasicMaterial color={color} transparent opacity={0.06} blending={THREE.AdditiveBlending} />
-      </mesh>
-    </group>
-  );
-}
-
-function RealHeadAvatar({ emotion, isSpeaking, bpm, index = 0, name, isActive = true, mouthOpenness = 0 }: AvatarProps) {
+function HeadAvatar({ emotion, isSpeaking, bpm, index = 0, isActive = true }: AvatarProps) {
   const groupRef = useRef<THREE.Group>(null);
-  const eyeLeftRef = useRef<THREE.Mesh>(null);
-  const eyeRightRef = useRef<THREE.Mesh>(null);
-  const mouthGlowRef = useRef<THREE.Mesh>(null);
+  const glowRef = useRef<THREE.Mesh>(null);
   const { scene } = useGLTF(HEAD_MODEL_URL);
   const [colorMap, normalMap] = useTexture(["/head-color.jpg", "/head-normal.jpg"]);
   const colors = EMOTION_COLORS[emotion];
   const offset = index * (Math.PI * 2 / 3);
-  const mouthVal = useRef(0);
 
   const model = useMemo(() => {
     colorMap.colorSpace = THREE.SRGBColorSpace;
@@ -111,17 +74,17 @@ function RealHeadAvatar({ emotion, isSpeaking, bpm, index = 0, name, isActive = 
         const mat = new THREE.MeshPhysicalMaterial({
           map: colorMap,
           normalMap: normalMap,
-          normalScale: new THREE.Vector2(1.2, 1.2),
-          roughness: 0.55,
+          normalScale: new THREE.Vector2(1.0, 1.0),
+          roughness: 0.5,
           metalness: 0.0,
-          clearcoat: 0.05,
-          clearcoatRoughness: 0.6,
-          sheen: 0.3,
+          clearcoat: 0.04,
+          clearcoatRoughness: 0.7,
+          sheen: 0.25,
           sheenRoughness: 0.5,
           sheenColor: new THREE.Color(0xffccaa),
-          envMapIntensity: 0.5,
+          envMapIntensity: 0.4,
           emissive: new THREE.Color(colors.emissive),
-          emissiveIntensity: 0.03,
+          emissiveIntensity: 0.02,
         });
         mesh.material = mat;
         mesh.castShadow = true;
@@ -135,144 +98,40 @@ function RealHeadAvatar({ emotion, isSpeaking, bpm, index = 0, name, isActive = 
     const t = state.clock.elapsedTime;
     if (!groupRef.current) return;
 
-    groupRef.current.rotation.y = Math.sin(t * 0.22 + offset) * (isActive ? 0.12 : 0.04);
-    groupRef.current.rotation.x = Math.sin(t * 0.15 + offset) * 0.025 - 0.05;
+    const headTurn = Math.sin(t * 0.25 + offset) * (isActive ? 0.1 : 0.03);
+    const headNod = Math.sin(t * 0.18 + offset) * 0.02;
+    groupRef.current.rotation.y = headTurn;
+    groupRef.current.rotation.x = headNod;
 
     const cs = groupRef.current.scale.x;
-    const ts = isActive ? 1.0 : 0.85;
-    groupRef.current.scale.setScalar(THREE.MathUtils.lerp(cs, ts, 0.04));
+    const ts = isActive ? 1.0 : 0.82;
+    groupRef.current.scale.setScalar(THREE.MathUtils.lerp(cs, ts, 0.05));
 
-    const targetMouth = isSpeaking
-      ? (mouthOpenness ?? (0.2 + Math.abs(Math.sin(t * 7)) * 0.8))
-      : 0;
-    mouthVal.current = THREE.MathUtils.lerp(mouthVal.current, targetMouth, 0.2);
-
-    if (mouthGlowRef.current) {
-      const mat = mouthGlowRef.current.material as THREE.MeshBasicMaterial;
-      mat.opacity = mouthVal.current * 0.4;
-      mouthGlowRef.current.scale.y = 0.3 + mouthVal.current * 0.8;
+    if (glowRef.current) {
+      const mat = glowRef.current.material as THREE.MeshBasicMaterial;
+      if (isSpeaking) {
+        mat.opacity = 0.03 + Math.abs(Math.sin(t * 6)) * 0.04;
+      } else {
+        mat.opacity = THREE.MathUtils.lerp(mat.opacity, 0, 0.1);
+      }
     }
-
-    const blink = Math.sin(t * 0.4 + offset);
-    const blinkScale = blink > 0.94 ? Math.max(0.05, 1.0 - (blink - 0.94) * 16) : 1.0;
-    if (eyeLeftRef.current) eyeLeftRef.current.scale.y = blinkScale;
-    if (eyeRightRef.current) eyeRightRef.current.scale.y = blinkScale;
   });
 
   return (
     <group ref={groupRef}>
-      <primitive object={model} scale={0.12} position={[0, -0.15, 0]} />
+      <primitive object={model} scale={0.13} position={[0, 0, 0]} />
 
-      <group position={[0, 0.75, 0.95]}>
-        <group ref={eyeLeftRef} position={[-0.32, 0, 0]}>
-          <mesh>
-            <sphereGeometry args={[0.08, 20, 20]} />
-            <meshStandardMaterial color={0xf5f5f0} roughness={0.08} metalness={0} />
-          </mesh>
-          <mesh position={[0, 0, 0.06]}>
-            <sphereGeometry args={[0.04, 16, 16]} />
-            <meshStandardMaterial
-              color={0x3d5c4a}
-              roughness={0.15}
-              emissive={new THREE.Color(colors.primary)}
-              emissiveIntensity={0.06}
-            />
-          </mesh>
-          <mesh position={[0, 0, 0.075]}>
-            <sphereGeometry args={[0.02, 12, 12]} />
-            <meshStandardMaterial color={0x050505} roughness={0.05} />
-          </mesh>
-          <mesh position={[-0.01, 0.01, 0.08]}>
-            <sphereGeometry args={[0.006, 6, 6]} />
-            <meshBasicMaterial color={0xffffff} />
-          </mesh>
-        </group>
-
-        <group ref={eyeRightRef} position={[0.32, 0, 0]}>
-          <mesh>
-            <sphereGeometry args={[0.08, 20, 20]} />
-            <meshStandardMaterial color={0xf5f5f0} roughness={0.08} metalness={0} />
-          </mesh>
-          <mesh position={[0, 0, 0.06]}>
-            <sphereGeometry args={[0.04, 16, 16]} />
-            <meshStandardMaterial
-              color={0x3d5c4a}
-              roughness={0.15}
-              emissive={new THREE.Color(colors.primary)}
-              emissiveIntensity={0.06}
-            />
-          </mesh>
-          <mesh position={[0, 0, 0.075]}>
-            <sphereGeometry args={[0.02, 12, 12]} />
-            <meshStandardMaterial color={0x050505} roughness={0.05} />
-          </mesh>
-          <mesh position={[0.01, 0.01, 0.08]}>
-            <sphereGeometry args={[0.006, 6, 6]} />
-            <meshBasicMaterial color={0xffffff} />
-          </mesh>
-        </group>
-      </group>
-
-      <mesh ref={mouthGlowRef} position={[0, 0.22, 1.05]}>
-        <sphereGeometry args={[0.08, 16, 8]} />
+      <mesh ref={glowRef} position={[0, 0, -0.2]}>
+        <sphereGeometry args={[1.8, 24, 24]} />
         <meshBasicMaterial
           color={colors.primary}
           transparent
           opacity={0}
-          blending={THREE.AdditiveBlending}
+          side={THREE.BackSide}
           depthWrite={false}
+          blending={THREE.AdditiveBlending}
         />
       </mesh>
-
-      <group position={[0, -0.9, 0]}>
-        <mesh castShadow>
-          <cylinderGeometry args={[0.15, 0.18, 0.3, 16]} />
-          <meshStandardMaterial color={0xb88f65} roughness={0.6} metalness={0.02} />
-        </mesh>
-      </group>
-
-      <group position={[0, -1.4, 0]}>
-        <mesh castShadow>
-          <cylinderGeometry args={[0.35, 0.55, 0.7, 20, 4, false]} />
-          <meshStandardMaterial
-            color={0x1a1a2e}
-            roughness={0.65}
-            metalness={0.12}
-            emissive={new THREE.Color(colors.primary)}
-            emissiveIntensity={0.02}
-          />
-        </mesh>
-        <mesh position={[0, 0.32, 0.26]} scale={[0.5, 0.08, 0.18]}>
-          <sphereGeometry args={[1, 14, 10]} />
-          <meshStandardMaterial color={0x222240} roughness={0.6} metalness={0.1} />
-        </mesh>
-        <mesh position={[0, 0.31, 0.28]} scale={[0.3, 0.05, 0.1]}>
-          <sphereGeometry args={[1, 12, 8]} />
-          <meshStandardMaterial color={0x3a3a4a} roughness={0.7} />
-        </mesh>
-        <mesh position={[-0.42, 0.12, 0]} scale={[0.2, 0.22, 0.18]} rotation={[0, 0, 0.25]}>
-          <sphereGeometry args={[1, 12, 10]} />
-          <meshStandardMaterial color={0x1a1a2e} roughness={0.65} metalness={0.12} />
-        </mesh>
-        <mesh position={[0.42, 0.12, 0]} scale={[0.2, 0.22, 0.18]} rotation={[0, 0, -0.25]}>
-          <sphereGeometry args={[1, 12, 10]} />
-          <meshStandardMaterial color={0x1a1a2e} roughness={0.65} metalness={0.12} />
-        </mesh>
-      </group>
-
-      {isActive && isSpeaking && (
-        <mesh position={[0, 0, -0.3]}>
-          <sphereGeometry args={[1.5, 20, 20]} />
-          <meshBasicMaterial
-            color={colors.primary}
-            transparent
-            opacity={0.02}
-            side={THREE.BackSide}
-            depthWrite={false}
-            blending={THREE.AdditiveBlending}
-          />
-        </mesh>
-      )}
     </group>
   );
 }
@@ -282,8 +141,7 @@ function LoadingAvatar({ color }: { color: number }) {
   useFrame((s) => {
     if (ref.current) {
       ref.current.rotation.y = s.clock.elapsedTime * 0.5;
-      (ref.current.material as THREE.MeshBasicMaterial).opacity =
-        0.3 + Math.sin(s.clock.elapsedTime * 2) * 0.2;
+      (ref.current.material as THREE.MeshBasicMaterial).opacity = 0.3 + Math.sin(s.clock.elapsedTime * 2) * 0.2;
     }
   });
   return (
@@ -322,53 +180,43 @@ export default function Avatar3D({
   return (
     <div className="w-full h-full relative" style={{ background: "radial-gradient(ellipse at center, #0a1628 0%, #000408 70%)" }}>
       <Canvas
-        camera={{ position: [0, 0.2, 3.2], fov: 35 }}
+        camera={{ position: [0, 0.3, 3.0], fov: 32 }}
         dpr={[1, 2]}
         gl={{
           antialias: true,
           alpha: true,
           toneMapping: THREE.ACESFilmicToneMapping,
-          toneMappingExposure: 1.1,
+          toneMappingExposure: 1.2,
         }}
         shadows
       >
         <color attach="background" args={["#000408"]} />
         <fog attach="fog" args={["#000408", 6, 14]} />
 
-        <Environment preset="studio" environmentIntensity={0.3} />
+        <Environment preset="studio" environmentIntensity={0.25} />
 
-        <ambientLight intensity={0.25} color={0xffe8d0} />
-        <directionalLight
-          position={[1.5, 2.5, 3]}
-          intensity={2.5}
-          color={0xfff0e0}
-          castShadow
-          shadow-mapSize-width={1024}
-          shadow-mapSize-height={1024}
-          shadow-bias={-0.0001}
-        />
-        <directionalLight position={[-2.5, 1.5, 1]} intensity={0.6} color={0xc0d8ff} />
-        <directionalLight position={[0.5, -0.5, 3]} intensity={0.4} color={0xffd4b0} />
-        <spotLight position={[0, 3, 2]} intensity={0.8} angle={0.4} penumbra={0.5} color={0xfff5e6} />
-        <pointLight position={[0, 0, 3.5]} intensity={0.3} color={EMOTION_COLORS[emotion].primary} />
-        <pointLight position={[-1.5, 0.5, 1.5]} intensity={0.12} color={0x88aaff} />
+        <ambientLight intensity={0.3} color={0xffe8d0} />
+        <directionalLight position={[2, 3, 4]} intensity={2.0} color={0xfff0e0} castShadow />
+        <directionalLight position={[-2, 1.5, 1]} intensity={0.5} color={0xc0d8ff} />
+        <directionalLight position={[0, -1, 3]} intensity={0.3} color={0xffd4b0} />
+        <spotLight position={[0, 3, 2]} intensity={0.6} angle={0.5} penumbra={0.6} color={0xfff5e6} />
+        <pointLight position={[0, 0, 3]} intensity={0.2} color={EMOTION_COLORS[emotion].primary} />
 
-        <Stars radius={8} depth={25} count={600} factor={1.5} saturation={0.1} fade speed={0.3} />
-        <AmbientParticles color={EMOTION_COLORS[emotion].primary} count={400} />
-        <SubtleRings color={EMOTION_COLORS[emotion].primary} />
+        <Stars radius={8} depth={25} count={400} factor={1.2} saturation={0.1} fade speed={0.3} />
+        <AmbientParticles color={EMOTION_COLORS[emotion].primary} />
 
         <Suspense fallback={<LoadingAvatar color={EMOTION_COLORS[emotion].primary} />}>
           {panelMode && panelAvatars ? (
             <group>
               {panelAvatars.map((member, i) => {
                 const count = panelAvatars.length;
-                const spacing = Math.min(3.0, 6 / count);
+                const spacing = Math.min(2.8, 5.5 / count);
                 const x = (i - (count - 1) / 2) * spacing;
                 const isActive = i === activeSpeakerIndex;
                 return (
-                  <group key={i} position={[x, 0.2, 0]} scale={count > 2 ? 0.52 : 0.65}>
-                    <Float speed={1.0} rotationIntensity={0.03} floatIntensity={0.06}>
-                      <RealHeadAvatar
+                  <group key={i} position={[x, 0.15, 0]} scale={count > 2 ? 0.5 : 0.6}>
+                    <Float speed={1.0} rotationIntensity={0.02} floatIntensity={0.04}>
+                      <HeadAvatar
                         emotion={member.emotion}
                         isSpeaking={speakingStates[i]}
                         bpm={bpm}
@@ -383,8 +231,8 @@ export default function Avatar3D({
               })}
             </group>
           ) : (
-            <Float speed={1.2} rotationIntensity={0.03} floatIntensity={0.08}>
-              <RealHeadAvatar
+            <Float speed={1.2} rotationIntensity={0.02} floatIntensity={0.06}>
+              <HeadAvatar
                 emotion={emotion}
                 isSpeaking={isSpeaking}
                 bpm={bpm}
@@ -398,7 +246,7 @@ export default function Avatar3D({
 
       <div className="absolute inset-0 pointer-events-none"
         style={{
-          background: `repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,212,255,0.005) 3px,rgba(0,212,255,0.005) 4px)`,
+          background: "repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,212,255,0.004) 3px,rgba(0,212,255,0.004) 4px)",
           mixBlendMode: "screen",
         }}
       />

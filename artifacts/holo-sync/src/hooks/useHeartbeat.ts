@@ -257,7 +257,7 @@ function analyzeChannel(
   };
 }
 
-// ── ROI sampling — full RGB (for channel selection) ───────────────────────
+// ── ROI sampling — multi-region (forehead, cheeks, nose, chin, temples) ────
 function sampleRGB(
   ctx: CanvasRenderingContext2D,
   foreheadBox: FaceBox | null,
@@ -287,8 +287,24 @@ function sampleRGB(
     addBox(foreheadBox.x, foreheadBox.y, foreheadBox.w, foreheadBox.h, "FH");
   if (cheekBox && cheekBox.w > 10 && cheekBox.h > 8)
     addBox(cheekBox.x, cheekBox.y, cheekBox.w, cheekBox.h, "CK");
-  if (cnt < 20 && faceBox && faceBox.w > 30 && faceBox.h > 30)
-    addBox(faceBox.x + faceBox.w * 0.25, faceBox.y + faceBox.h * 0.05, faceBox.w * 0.5, faceBox.h * 0.2, "FC");
+
+  if (faceBox && faceBox.w > 30 && faceBox.h > 30) {
+    const fx = faceBox.x, fy = faceBox.y, fw = faceBox.w, fh = faceBox.h;
+
+    addBox(fx + fw * 0.38, fy + fh * 0.55, fw * 0.24, fh * 0.12, "NS");
+
+    addBox(fx + fw * 0.30, fy + fh * 0.78, fw * 0.40, fh * 0.10, "CN");
+
+    addBox(fx + fw * 0.02, fy + fh * 0.15, fw * 0.18, fh * 0.18, "LT");
+    addBox(fx + fw * 0.80, fy + fh * 0.15, fw * 0.18, fh * 0.18, "RT");
+
+    addBox(fx + fw * 0.05, fy + fh * 0.40, fw * 0.20, fh * 0.15, "LJ");
+    addBox(fx + fw * 0.75, fy + fh * 0.40, fw * 0.20, fh * 0.15, "RJ");
+
+    if (cnt < 50) {
+      addBox(fx + fw * 0.25, fy + fh * 0.05, fw * 0.50, fh * 0.20, "FC");
+    }
+  }
 
   if (cnt < 5) return { r: 0, g: 0, b: 0, brightness: 0, ok: false, label: "NONE" };
   const r = totalR / cnt, g = totalG / cnt, b = totalB / cnt;

@@ -1,5 +1,16 @@
 uploads = []
-generated = []
+
+[[generated]]
+id = "Dumu9b6fjyxfdnn70dBjz"
+uri = "file://artifacts/holo-sync-deck/public/hero.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "xb5DLeeXODCUdP1QCy5-d"
+uri = "file://artifacts/holo-sync-deck/public/architecture.png"
+type = "image"
+title = "generated_image"
 
 [[outputs]]
 id = "fngbHVXfnESRQmMoZFimb"
@@ -12,3 +23,15 @@ id = "dXObvJeWERUhTt-HOEs1K"
 uri = "file://HOLO_SYNC_DOCUMENTATION.docx"
 type = "word_document"
 title = "Holo-Sync Documentation (with Visual Diagrams)"
+
+[[outputs]]
+id = "VYutxniEpQymTYQOeRnrr"
+uri = "file://.local/outputs/Heartbeat-Viewer.pptx"
+type = "slides"
+title = "Heartbeat Viewer.pptx"
+
+[[outputs]]
+id = "_OjRIrWTY3Md8i5MHaC9n"
+uri = "file://.local/outputs/Heartbeat-Viewer.pdf"
+type = "pdf"
+title = "Heartbeat Viewer.pdf"
