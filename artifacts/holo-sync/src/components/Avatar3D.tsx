@@ -1,12 +1,20 @@
 import { useState, useEffect, useRef } from "react";
-import avatarImage from "@assets/studio-shot-photo-professional-headshot-260nw-2752558817_1775288452602.webp";
+import avatarChairman from "@assets/8c9509071f0cc8c00e1d0d40ddb37f56_1775290103056.jpg";
+import avatarMember1 from "@assets/3bdea5f546bb0eae992501ddbbb71394_1775290075982.jpg";
+import avatarMember2 from "@assets/539a7c4c33978728de8528842fa08a59_1775290062146.jpg";
+
+const PANEL_AVATARS_IMG = [
+  { src: avatarChairman, label: "Chairman" },
+  { src: avatarMember1, label: "Member 1" },
+  { src: avatarMember2, label: "Member 2" },
+];
 
 const EMOTION_COLORS: Record<string, { primary: string; glow: string }> = {
-  neutral:    { primary: "#00d4ff", glow: "0 0 30px rgba(0,212,255,0.6), 0 0 60px rgba(0,212,255,0.3)" },
-  empathetic: { primary: "#00ff88", glow: "0 0 30px rgba(0,255,136,0.6), 0 0 60px rgba(0,255,136,0.3)" },
-  stern:      { primary: "#ff3333", glow: "0 0 30px rgba(255,51,51,0.6), 0 0 60px rgba(255,51,51,0.3)" },
-  curious:    { primary: "#ffaa00", glow: "0 0 30px rgba(255,170,0,0.6), 0 0 60px rgba(255,170,0,0.3)" },
-  stressed:   { primary: "#ff00ff", glow: "0 0 30px rgba(255,0,255,0.6), 0 0 60px rgba(255,0,255,0.3)" },
+  neutral:    { primary: "#00d4ff", glow: "0 0 25px rgba(0,212,255,0.5), 0 0 50px rgba(0,212,255,0.25)" },
+  empathetic: { primary: "#00ff88", glow: "0 0 25px rgba(0,255,136,0.5), 0 0 50px rgba(0,255,136,0.25)" },
+  stern:      { primary: "#ff3333", glow: "0 0 25px rgba(255,51,51,0.5), 0 0 50px rgba(255,51,51,0.25)" },
+  curious:    { primary: "#ffaa00", glow: "0 0 25px rgba(255,170,0,0.5), 0 0 50px rgba(255,170,0,0.25)" },
+  stressed:   { primary: "#ff00ff", glow: "0 0 25px rgba(255,0,255,0.5), 0 0 50px rgba(255,0,255,0.25)" },
 };
 
 interface Avatar3DProps {
@@ -22,6 +30,7 @@ interface Avatar3DProps {
 }
 
 function AvatarCard({
+  src,
   emotion,
   isSpeaking,
   label,
@@ -29,6 +38,7 @@ function AvatarCard({
   getAmplitude,
   size = "medium",
 }: {
+  src: string;
   emotion: string;
   isSpeaking: boolean;
   label?: string;
@@ -70,7 +80,7 @@ function AvatarCard({
         }}
       >
         <img
-          src={avatarImage}
+          src={src}
           alt="AI Interviewer"
           className="w-full h-full object-cover"
         />
@@ -109,17 +119,17 @@ export default function Avatar3D({
 
   if (panelMode) {
     const panelEmotions = ["stern", "curious", "neutral"];
-    const panelLabels = ["Chairman", "Member 1", "Member 2"];
 
     return (
       <div className="w-full h-full flex items-center justify-center">
         <div className="flex items-end gap-6">
-          {panelLabels.map((label, i) => (
+          {PANEL_AVATARS_IMG.map((avatar, i) => (
             <AvatarCard
               key={i}
+              src={avatar.src}
               emotion={panelEmotions[i]}
               isSpeaking={isSpeaking && activeSpeakerIndex === i}
-              label={label}
+              label={avatar.label}
               isActive={activeSpeakerIndex === i}
               getAmplitude={activeSpeakerIndex === i ? getAmplitude : undefined}
               size={activeSpeakerIndex === i ? "medium" : "small"}
@@ -145,6 +155,7 @@ export default function Avatar3D({
       </div>
 
       <AvatarCard
+        src={avatarMember1}
         emotion={emotion}
         isSpeaking={isSpeaking}
         getAmplitude={getAmplitude}
