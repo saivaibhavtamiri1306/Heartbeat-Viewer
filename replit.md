@@ -32,7 +32,7 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 
 ### Features
 - **rPPG Heartbeat Detection (v4)**: Simplified proven approach based on habom2310, giladoved, erdewit/heartwave, prouast/heartbeat-js repos. Green channel average from forehead+cheek ROI → 256-sample buffer → linear detrend → Hamming window → zero-padded FFT → peak in 0.75–3.0 Hz (45–180 BPM) → parabolic interpolation → EMA smoothing (α=0.3). Uses actual webcam FPS from timestamps. Calibrates in ~3s (90 frames). No POS/ACF/consensus — just the proven green+FFT pipeline that all working repos use.
-- **3D Holographic Avatar**: React Three Fiber scene with realistic human-like faces (skin tone, lips, jaw, irises, eyebrows, ears). Emotion-adaptive (neutral, stern, empathetic, amused, thinking).
+- **3D Holographic Avatar**: TalkingHead.js (met4citizen/TalkingHead) integration with GLB avatar models (brunette.glb, avaturn.glb, avatarsdk.glb). Real 3D rendered characters via Three.js with idle animations (blinking, breathing, head movement), emotion-adaptive moods, and amplitude-driven lip sync via morph target blend shapes.
 - **5 Interview Domains**: UPSC, SWE, NDA, Medical, Investment Banking — each with domain-specific educational backgrounds, topic selection, and Easy/Medium/Hard difficulty levels.
 - **Interview Configuration**: After domain selection, users choose their educational background (B.Tech, BA, MBBS, etc.), difficulty level, and specific topics. Questions are filtered and weighted by difficulty.
 - **Cross-Fire Panel Mode**: UPSC and NDA have 3-avatar panels. Active speaker is highlighted with glow + scale. Other avatars are dimmed.
@@ -53,7 +53,11 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 - `src/hooks/useHeartbeat.ts` — rPPG algorithm (POS, Butterworth, consensus BPM)
 - `src/hooks/useTTS.ts` — AI TTS hook with OpenAI voice playback + browser fallback
 - `src/hooks/useEyeContact.ts` — Eye contact detection from face position
-- `src/components/Avatar3D.tsx` — 3D avatar with HumanHead, panel mode, lip sync, subtitles
+- `src/components/Avatar3D.tsx` — 3D avatar using TalkingHead.js GLB renderer, panel mode, amplitude-driven lip sync
+- `src/vendor/talkinghead.mjs` — TalkingHead library (met4citizen/TalkingHead v1.7) with Three.js 3D avatar renderer
+- `src/vendor/lipsync-en.mjs` — English lip-sync module for TalkingHead
+- `src/vendor/dynamicbones.mjs` — Dynamic bone physics for TalkingHead avatars
+- `src/vendor/playback-worklet.js` — Audio worklet for TalkingHead streaming
 - `src/components/InterviewReport.tsx` — Full post-interview analytics report
 - `src/components/AnswerTimer.tsx` — Per-question countdown timer
 - `src/components/EyeContactIndicator.tsx` — Live eye contact status indicator

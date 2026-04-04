@@ -17,6 +17,7 @@ export function useTTS() {
   const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
   const animFrameRef = useRef<number>(0);
   const amplitudeRef = useRef(0);
+  const lastBlobRef = useRef<Blob | null>(null);
 
   useEffect(() => {
     return () => {
@@ -28,6 +29,7 @@ export function useTTS() {
   }, []);
 
   const getAmplitude = useCallback(() => amplitudeRef.current, []);
+  const getLastBlob = useCallback(() => lastBlobRef.current, []);
 
   const speak = useCallback(async (text: string, options: TTSOptions = {}): Promise<void> => {
     const { voice = "nova", onStart, onEnd, onError } = options;
@@ -60,6 +62,7 @@ export function useTTS() {
       }
 
       const blob = await res.blob();
+      lastBlobRef.current = blob;
       const url = URL.createObjectURL(blob);
 
       return new Promise<void>((resolve) => {
@@ -140,7 +143,7 @@ export function useTTS() {
     window.speechSynthesis?.cancel();
   }, []);
 
-  return { speak, stop, getAmplitude };
+  return { speak, stop, getAmplitude, getLastBlob };
 }
 
 function fallbackSpeak(

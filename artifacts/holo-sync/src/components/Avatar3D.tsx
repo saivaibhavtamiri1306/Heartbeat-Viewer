@@ -1,31 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import avatarChairman from "@assets/8c9509071f0cc8c00e1d0d40ddb37f56_1775290103056.jpg";
-import avatarMember1 from "@assets/3bdea5f546bb0eae992501ddbbb71394_1775290075982.jpg";
-import avatarMember2 from "@assets/539a7c4c33978728de8528842fa08a59_1775290062146.jpg";
-
-const PANEL_AVATARS = [
-  {
-    src: avatarChairman,
-    label: "Chairman",
-    mouthX: 0.50, mouthY: 0.72,
-    mouthW: 0.14, mouthH: 0.04,
-    skinColor: "#d4a882",
-  },
-  {
-    src: avatarMember1,
-    label: "Member 1",
-    mouthX: 0.50, mouthY: 0.73,
-    mouthW: 0.13, mouthH: 0.035,
-    skinColor: "#d9a98a",
-  },
-  {
-    src: avatarMember2,
-    label: "Member 2",
-    mouthX: 0.50, mouthY: 0.72,
-    mouthW: 0.12, mouthH: 0.035,
-    skinColor: "#ecc0a8",
-  },
-];
 
 const EMOTION_COLORS: Record<string, string> = {
   neutral: "#00d4ff",
@@ -35,209 +8,241 @@ const EMOTION_COLORS: Record<string, string> = {
   stressed: "#ff00ff",
 };
 
-function TalkingAvatar({
-  avatarConfig,
+const AVATAR_MODELS = [
+  { url: "./avatars/brunette.glb", body: "F" },
+  { url: "./avatars/avaturn.glb", body: "F" },
+  { url: "./avatars/avatarsdk.glb", body: "M" },
+];
+
+const MOOD_MAP: Record<string, string> = {
+  neutral: "neutral",
+  empathetic: "happy",
+  stern: "angry",
+  curious: "surprised",
+  stressed: "sad",
+};
+
+let TalkingHeadClass: any = null;
+let thLoadPromise: Promise<any> | null = null;
+
+function loadTalkingHead(): Promise<any> {
+  if (TalkingHeadClass) return Promise.resolve(TalkingHeadClass);
+  if (thLoadPromise) return thLoadPromise;
+  thLoadPromise = import("../vendor/talkinghead.mjs").then((mod) => {
+    TalkingHeadClass = mod.TalkingHead;
+    return TalkingHeadClass;
+  });
+  return thLoadPromise;
+}
+
+const VISEME_CYCLE = [
+  "viseme_aa", "viseme_O", "viseme_E", "viseme_I", "viseme_U",
+  "viseme_PP", "viseme_FF", "viseme_TH", "viseme_DD",
+];
+
+function TalkingHeadAvatar({
+  avatarIndex,
   isSpeaking,
   getAmplitude,
   color,
   size,
   isActive = true,
   label,
+  emotion,
 }: {
-  avatarConfig: typeof PANEL_AVATARS[0];
+  avatarIndex: number;
   isSpeaking: boolean;
   getAmplitude?: () => number;
   color: string;
   size: number;
   isActive?: boolean;
   label?: string;
+  emotion?: string;
 }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const imgRef = useRef<HTMLImageElement | null>(null);
-  const frameRef = useRef<number>(0);
-  const smoothAmp = useRef(0);
-  const timeRef = useRef(Math.random() * 100);
-  const blinkTimer = useRef(3 + Math.random() * 4);
-  const blinkPhase = useRef(-1);
-  const loadedRef = useRef(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const headRef = useRef<any>(null);
+  const initRef = useRef(false);
+  const animRef = useRef<number>(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => {
-      imgRef.current = img;
-      loadedRef.current = true;
-    };
-    img.src = avatarConfig.src;
-  }, [avatarConfig.src]);
+    const container = containerRef.current;
+    if (!container || initRef.current) return;
+    initRef.current = true;
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    const model = AVATAR_MODELS[avatarIndex % AVATAR_MODELS.length];
 
-    let active = true;
-    const w = size * 2;
-    const h = size * 2;
+    (async () => {
+      try {
+        const TH = await loadTalkingHead();
 
-    const draw = () => {
-      if (!active) return;
-      frameRef.current = requestAnimationFrame(draw);
-      if (!imgRef.current || !loadedRef.current) return;
+        const head = new TH(container, {
+          ttsEndpoint: null,
+          lipsyncModules: ["en"],
+          lipsyncLang: "en",
+          cameraView: "head",
+          cameraDistance: 0.6,
+          cameraX: 0,
+          cameraY: 0,
+          cameraRotateX: 0,
+          cameraRotateY: 0,
+          avatarMood: "neutral",
+          avatarIdleEyeContact: 0.7,
+          statsNode: null,
+        });
 
-      const img = imgRef.current;
-      timeRef.current += 0.016;
-      const t = timeRef.current;
+        await head.showAvatar(
+          {
+            url: model.url,
+            body: model.body,
+            avatarMood: "neutral",
+            lipsyncLang: "en",
+          },
+          (ev: any) => {
+            if (ev && ev.lengthComputable) {
+              const pct = Math.round((ev.loaded / ev.total) * 100);
+              if (pct < 100) setLoading(true);
+            }
+          }
+        );
 
-      const rawAmp = (isSpeaking && isActive && getAmplitude) ? getAmplitude() : 0;
-      smoothAmp.current += (rawAmp - smoothAmp.current) * 0.25;
-      const amp = smoothAmp.current;
+        head.setView("head", { cameraDistance: 0.6 });
 
-      ctx.clearRect(0, 0, w, h);
-
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(w / 2, h / 2, w / 2, 0, Math.PI * 2);
-      ctx.clip();
-
-      const imgAspect = img.width / img.height;
-      let dw: number, dh: number, dx: number, dy: number;
-      if (imgAspect > 1) {
-        dh = h;
-        dw = h * imgAspect;
-        dx = (w - dw) / 2;
-        dy = 0;
-      } else {
-        dw = w;
-        dh = w / imgAspect;
-        dx = 0;
-        dy = (h - dh) / 2;
+        headRef.current = head;
+        setLoading(false);
+      } catch (err: any) {
+        console.error("[TalkingHead] Failed to load:", err);
+        setError(err?.message || "Failed to load 3D avatar");
+        setLoading(false);
       }
+    })();
 
-      const breathe = Math.sin(t * 1.2) * 0.003;
-      const bScale = 1 + breathe;
-      ctx.translate(w / 2, h / 2);
-      ctx.scale(bScale, bScale);
-      ctx.translate(-w / 2, -h / 2);
-
-      ctx.drawImage(img, dx, dy, dw, dh);
-
-      if (isSpeaking && isActive && amp > 0.02) {
-        const mx = w * avatarConfig.mouthX;
-        const my = h * avatarConfig.mouthY;
-        const mw = w * avatarConfig.mouthW;
-        const baseMh = h * avatarConfig.mouthH;
-
-        const openAmount = amp;
-        const mouthOpenH = baseMh + openAmount * h * 0.06;
-        const mouthWidth = mw * (1 + openAmount * 0.3);
-
-        ctx.save();
-
-        ctx.beginPath();
-        ctx.ellipse(mx, my, mouthWidth * 0.7, mouthOpenH * 1.2, 0, 0, Math.PI * 2);
-        ctx.clip();
-
-        const mouthGrad = ctx.createRadialGradient(mx, my, 0, mx, my, mouthWidth * 0.7);
-        mouthGrad.addColorStop(0, "#1a0505");
-        mouthGrad.addColorStop(0.7, "#2a0808");
-        mouthGrad.addColorStop(1, "#3a1010");
-        ctx.fillStyle = mouthGrad;
-        ctx.fill();
-
-        if (openAmount > 0.15) {
-          ctx.beginPath();
-          const teethY = my - mouthOpenH * 0.5;
-          const teethW = mouthWidth * 0.55;
-          const teethH = mouthOpenH * 0.22;
-          ctx.roundRect(mx - teethW, teethY, teethW * 2, teethH, 2);
-          ctx.fillStyle = "#f0ece4";
-          ctx.fill();
-        }
-
-        if (openAmount > 0.2) {
-          ctx.beginPath();
-          const tongueY = my + mouthOpenH * 0.3;
-          ctx.ellipse(mx, tongueY, mouthWidth * 0.35, mouthOpenH * 0.25, 0, 0, Math.PI * 2);
-          ctx.fillStyle = "#cc6666";
-          ctx.fill();
-        }
-
-        ctx.restore();
-
-        ctx.beginPath();
-        ctx.moveTo(mx - mouthWidth * 0.65, my);
-        ctx.quadraticCurveTo(mx, my - baseMh * 0.6, mx + mouthWidth * 0.65, my);
-        ctx.strokeStyle = avatarConfig.skinColor;
-        ctx.lineWidth = 2.5;
-        ctx.stroke();
-
-        ctx.beginPath();
-        ctx.moveTo(mx - mouthWidth * 0.65, my);
-        ctx.quadraticCurveTo(mx, my + mouthOpenH * 1.5, mx + mouthWidth * 0.65, my);
-        ctx.strokeStyle = avatarConfig.skinColor;
-        ctx.lineWidth = 2;
-        ctx.stroke();
-      }
-
-      blinkTimer.current -= 0.016;
-      if (blinkTimer.current <= 0 && blinkPhase.current < 0) {
-        blinkPhase.current = 0;
-      }
-      if (blinkPhase.current >= 0) {
-        blinkPhase.current += 0.1;
-        const blink = Math.sin(blinkPhase.current * Math.PI);
-
-        if (blink > 0.1) {
-          const eyeY = h * 0.42;
-          const eyeW = w * 0.065;
-          const eyeH = eyeW * 0.35 * blink;
-
-          ctx.fillStyle = avatarConfig.skinColor;
-          ctx.beginPath();
-          ctx.ellipse(w * 0.39, eyeY, eyeW, eyeH, 0, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.beginPath();
-          ctx.ellipse(w * 0.61, eyeY, eyeW, eyeH, 0, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-        if (blinkPhase.current >= 1) {
-          blinkPhase.current = -1;
-          blinkTimer.current = 2.5 + Math.random() * 4;
-        }
-      }
-
-      ctx.restore();
-    };
-
-    frameRef.current = requestAnimationFrame(draw);
     return () => {
-      active = false;
-      cancelAnimationFrame(frameRef.current);
+      cancelAnimationFrame(animRef.current);
+      initRef.current = false;
+      headRef.current = null;
     };
-  }, [avatarConfig, isSpeaking, getAmplitude, isActive, size]);
+  }, [avatarIndex]);
+
+  useEffect(() => {
+    const head = headRef.current;
+    if (!head) return;
+
+    const mood = MOOD_MAP[emotion || "neutral"] || "neutral";
+    try {
+      head.setMood(mood);
+    } catch {}
+  }, [emotion]);
+
+  useEffect(() => {
+    const head = headRef.current;
+    if (!head) return;
+
+    cancelAnimationFrame(animRef.current);
+
+    if (isSpeaking && isActive && getAmplitude) {
+      let frameCount = 0;
+
+      const pump = () => {
+        const amp = getAmplitude?.() || 0;
+        frameCount++;
+
+        if (head.mtAvatar) {
+          const jawOpen = head.mtAvatar["jawOpen"];
+          if (jawOpen) {
+            jawOpen.value = amp * 0.7;
+            jawOpen.needsUpdate = true;
+          }
+
+          const vi = Math.floor(frameCount / 4) % VISEME_CYCLE.length;
+          for (let i = 0; i < VISEME_CYCLE.length; i++) {
+            const vk = VISEME_CYCLE[i];
+            const mt = head.mtAvatar[vk];
+            if (mt) {
+              if (i === vi && amp > 0.05) {
+                mt.value = amp * 0.5;
+              } else {
+                mt.value = mt.baseline || 0;
+              }
+              mt.needsUpdate = true;
+            }
+          }
+        }
+
+        animRef.current = requestAnimationFrame(pump);
+      };
+      pump();
+    } else {
+      if (head.mtAvatar) {
+        const jawOpen = head.mtAvatar["jawOpen"];
+        if (jawOpen) {
+          jawOpen.value = jawOpen.baseline || 0;
+          jawOpen.needsUpdate = true;
+        }
+        for (const vk of VISEME_CYCLE) {
+          const mt = head.mtAvatar[vk];
+          if (mt) {
+            mt.value = mt.baseline || 0;
+            mt.needsUpdate = true;
+          }
+        }
+      }
+    }
+
+    return () => cancelAnimationFrame(animRef.current);
+  }, [isSpeaking, isActive, getAmplitude]);
 
   return (
     <div className="flex flex-col items-center gap-2">
       <div
         style={{
-          width: size, height: size, borderRadius: "50%", overflow: "hidden",
-          border: `3px solid ${isActive ? color : color + "40"}`,
+          width: size,
+          height: size,
+          borderRadius: "16px",
+          overflow: "hidden",
+          border: `2px solid ${isActive ? color : color + "40"}`,
           boxShadow: isActive
-            ? `0 0 25px ${color}60, 0 0 50px ${color}25, 0 8px 32px rgba(0,0,0,0.4)`
-            : `0 4px 16px rgba(0,0,0,0.3)`,
+            ? `0 0 30px ${color}60, 0 0 60px ${color}20, 0 10px 40px rgba(0,0,0,0.5)`
+            : `0 4px 20px rgba(0,0,0,0.3)`,
           opacity: isActive ? 1 : 0.45,
-          transition: "all 0.3s ease",
+          transition: "all 0.4s ease",
+          background: "#0a0e18",
+          position: "relative",
         }}
       >
-        <canvas
-          ref={canvasRef}
-          width={size * 2}
-          height={size * 2}
-          style={{ width: size, height: size, display: "block" }}
+        <div
+          ref={containerRef}
+          style={{
+            width: size,
+            height: size,
+            position: "absolute",
+            top: 0,
+            left: 0,
+          }}
         />
+        {loading && (
+          <div
+            className="absolute inset-0 flex flex-col items-center justify-center gap-2"
+            style={{ background: "rgba(0,4,8,0.9)" }}
+          >
+            <div
+              className="w-8 h-8 border-2 rounded-full animate-spin"
+              style={{ borderColor: `${color}40`, borderTopColor: color }}
+            />
+            <span className="text-[10px] font-mono" style={{ color: color + "80" }}>
+              Loading 3D...
+            </span>
+          </div>
+        )}
+        {error && (
+          <div
+            className="absolute inset-0 flex items-center justify-center p-4 text-center"
+            style={{ background: "rgba(0,4,8,0.95)" }}
+          >
+            <span className="text-[10px] font-mono text-red-400">{error}</span>
+          </div>
+        )}
       </div>
       {label && (
         <span
@@ -268,27 +273,34 @@ interface Avatar3DProps {
 }
 
 export default function Avatar3D({
-  emotion, isSpeaking, bpm, panelMode, activeSpeakerIndex = 0, getAmplitude,
+  emotion,
+  isSpeaking,
+  bpm,
+  panelMode,
+  activeSpeakerIndex = 0,
+  getAmplitude,
 }: Avatar3DProps) {
   const ec = EMOTION_COLORS[emotion] || "#00d4ff";
 
   if (panelMode) {
     const pc = ["#ff3333", "#ffaa00", "#00d4ff"];
+    const labels = ["Chairman", "Member 1", "Member 2"];
     return (
       <div className="w-full h-full flex items-center justify-center">
         <div className="flex items-end gap-6">
-          {PANEL_AVATARS.map((a, i) => {
+          {[0, 1, 2].map((i) => {
             const active = activeSpeakerIndex === i;
             return (
-              <TalkingAvatar
-                key={a.label}
-                avatarConfig={a}
+              <TalkingHeadAvatar
+                key={i}
+                avatarIndex={i}
                 isSpeaking={isSpeaking && active}
                 getAmplitude={active ? getAmplitude : undefined}
                 color={pc[i]}
-                size={active ? 170 : 120}
+                size={active ? 200 : 150}
                 isActive={active}
-                label={a.label}
+                label={labels[i]}
+                emotion={emotion}
               />
             );
           })}
@@ -301,16 +313,22 @@ export default function Avatar3D({
     <div className="w-full h-full flex flex-col items-center justify-center gap-4">
       <div
         className="text-[10px] font-mono uppercase tracking-[0.3em] px-4 py-1.5 rounded-full"
-        style={{ background: `${ec}15`, border: `1px solid ${ec}60`, color: ec, boxShadow: `0 0 20px ${ec}30` }}
+        style={{
+          background: `${ec}15`,
+          border: `1px solid ${ec}60`,
+          color: ec,
+          boxShadow: `0 0 20px ${ec}30`,
+        }}
       >
         {emotion.toUpperCase()}
       </div>
-      <TalkingAvatar
-        avatarConfig={PANEL_AVATARS[1]}
+      <TalkingHeadAvatar
+        avatarIndex={1}
         isSpeaking={isSpeaking}
         getAmplitude={getAmplitude}
         color={ec}
-        size={200}
+        size={240}
+        emotion={emotion}
       />
       <div className="text-xs font-mono tracking-widest flex items-center gap-2" style={{ color: ec }}>
         <span className="inline-block w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: ec }} />
