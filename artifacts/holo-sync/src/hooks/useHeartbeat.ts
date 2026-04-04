@@ -70,16 +70,18 @@ export interface HeartbeatData {
   roiDebug?: string;
 }
 
-const BUFFER_SIZE = 360;
-const MIN_FRAMES_FAST = 64;
-const MIN_FRAMES_FULL = 90;
-const BPM_LO = 45;
-const BPM_HI = 180;
+const BUFFER_SIZE = 450;
+const MIN_FRAMES_FAST = 48;
+const MIN_FRAMES_FULL = 72;
+const BPM_LO = 42;
+const BPM_HI = 185;
 const FL = BPM_LO / 60;
 const FH = BPM_HI / 60;
 const SMOOTH_WIN = 5;
-const MOTION_THRESH = 3.5;
-const HISTORY_LEN = 25;
+const MOTION_THRESH = 4.0;
+const HISTORY_LEN = 30;
+const ADAPTIVE_SMOOTH_MIN = 3;
+const ADAPTIVE_SMOOTH_MAX = 9;
 
 function clamp(v: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, v)); }
 
@@ -207,7 +209,21 @@ function computeSQI(mag: Float64Array, peakIdx: number, loIdx: number, hiIdx: nu
     if (Math.abs(k - peakIdx) <= halfW) peakBand += p;
   }
   if (totalBand < 1e-12) return 0;
-  return clamp(peakBand / totalBand, 0, 1);
+  const concentration = clamp(peakBand / totalBand, 0, 1);
+
+  const n = hiIdx - loIdx + 1;
+  if (n < 2) return concentration;
+  let logSum = 0, linSum = 0;
+  for (let k = loIdx; k <= hiIdx; k++) {
+    const p = mag[k] * mag[k] + 1e-15;
+    logSum += Math.log(p);
+    linSum += p;
+  }
+  const geoMean = Math.exp(logSum / n);
+  const ariMean = linSum / n;
+  const flatness = ariMean > 1e-15 ? 1 - clamp(geoMean / ariMean, 0, 1) : 0;
+
+  return clamp(concentration * 0.6 + flatness * 0.4, 0, 1);
 }
 
 interface AnalysisResult {
@@ -265,18 +281,30 @@ function welchPSD(sig: number[], fps: number, segLen: number, overlap: number): 
   return { mag: avgMag, freqRes: fps / pad, fftLen: pad };
 }
 
+function adaptiveSmooth(sig: number[], baseWin: number, noiseLevel: number): number[] {
+  const win = Math.round(clamp(
+    baseWin + noiseLevel * 2,
+    ADAPTIVE_SMOOTH_MIN,
+    ADAPTIVE_SMOOTH_MAX
+  ));
+  return movingAvg(sig, win);
+}
+
 function analyzeSignal(
   rawSig: number[], fps: number, preFiltered: boolean, method: string
 ): AnalysisResult {
   const N = rawSig.length;
 
+  const sigStd = std(rawSig);
+  const noiseLevel = clamp(sigStd / (mean(rawSig.map(Math.abs)) || 1), 0, 5);
+
   let processed: number[];
   if (preFiltered) {
     processed = detrend(rawSig);
-    processed = movingAvg(processed, SMOOTH_WIN);
+    processed = adaptiveSmooth(processed, SMOOTH_WIN, noiseLevel);
   } else {
     processed = detrend(rawSig);
-    processed = movingAvg(processed, SMOOTH_WIN);
+    processed = adaptiveSmooth(processed, SMOOTH_WIN, noiseLevel);
     processed = butterworthBandpass(processed, fps, FL, FH);
   }
 
@@ -373,7 +401,7 @@ function analyzeSignal(
 
 function computePOS(rSig: number[], gSig: number[], bSig: number[], fps: number): AnalysisResult {
   const N = rSig.length;
-  const winSize = Math.min(N, Math.round(fps * 1.6));
+  const winSize = Math.min(N, Math.round(fps * 2.0));
   const step = Math.max(1, Math.round(winSize / 2));
   const posSig = new Float64Array(N);
   const counts = new Float64Array(N);
@@ -420,7 +448,7 @@ function computePOS(rSig: number[], gSig: number[], bSig: number[], fps: number)
 
 function computeCHROM(rSig: number[], gSig: number[], bSig: number[], fps: number): AnalysisResult {
   const N = rSig.length;
-  const winSize = Math.min(N, Math.round(fps * 1.6));
+  const winSize = Math.min(N, Math.round(fps * 2.0));
   const step = Math.max(1, Math.round(winSize / 2));
   const chromSig = new Float64Array(N);
   const counts = new Float64Array(N);
@@ -658,6 +686,9 @@ export function useHeartbeat(
   const noFace = useRef<number>(0);
   const bpmHistory = useRef<number[]>([]);
   const prevRGB = useRef<{ r: number; g: number; b: number } | null>(null);
+  const confHistory = useRef<number[]>([]);
+  const stabilityRef = useRef<number>(0);
+  const motionDecay = useRef<number>(0);
 
   const [data, setData] = useState<HeartbeatData>({
     bpm: null, confidence: 0, signal: [], isActive: false,
@@ -698,7 +729,8 @@ export function useHeartbeat(
         bpmRef.current = null;
         rBuf.current = []; gBuf.current = []; bBuf.current = [];
         tsBuf.current = []; bpmHistory.current = []; motionBuf.current = [];
-        prevRGB.current = null;
+        prevRGB.current = null; confHistory.current = [];
+        stabilityRef.current = 0; motionDecay.current = 0;
         setData({
           bpm: null, confidence: 0, signal: [], isActive: true, stress: "low",
           trend: "stable", algorithm: "POS+CHROM+G", faceDetected: false,
@@ -720,13 +752,22 @@ export function useHeartbeat(
     prevRGB.current = { r: roi.r, g: roi.g, b: roi.b };
 
     motionBuf.current.push(frameMotion);
-    if (motionBuf.current.length > 30) motionBuf.current.shift();
+    if (motionBuf.current.length > 40) motionBuf.current.shift();
     const avgMotion = mean(motionBuf.current);
     const isHighMotion = frameMotion > avgMotion * MOTION_THRESH && motionBuf.current.length > 5;
 
     if (isHighMotion) {
+      motionDecay.current = Math.min(motionDecay.current + 3, 12);
       rafRef.current = requestAnimationFrame(processFrame);
       return;
+    }
+
+    if (motionDecay.current > 0) {
+      motionDecay.current--;
+      if (motionDecay.current > 6) {
+        rafRef.current = requestAnimationFrame(processFrame);
+        return;
+      }
     }
 
     const lum = roi.r + roi.g + roi.b;
@@ -748,7 +789,7 @@ export function useHeartbeat(
     const bufLen = rBuf.current.length;
 
     const minRequired = bpmRef.current === null ? MIN_FRAMES_FAST : MIN_FRAMES_FULL;
-    if (frameRef.current % 3 === 0 && bufLen >= minRequired) {
+    if (frameRef.current % 2 === 0 && bufLen >= minRequired) {
       const elapsed = (tsBuf.current[bufLen - 1] - tsBuf.current[0]) / 1000;
       if (elapsed < 0.5) { rafRef.current = requestAnimationFrame(processFrame); return; }
       const actualFps = (bufLen - 1) / elapsed;
@@ -768,9 +809,20 @@ export function useHeartbeat(
         finalRawBpm = result.snr > 3 ? result.bpm : acBpm;
       }
 
-      const totalConf = Math.min(98, result.confidence + bonusConf);
+      let totalConf = Math.min(98, result.confidence + bonusConf);
 
-      if (finalRawBpm >= BPM_LO && finalRawBpm <= BPM_HI && totalConf >= 5) {
+      const skinQuality = clamp(roi.skinRatio, 0, 1);
+      totalConf = Math.round(totalConf * (0.5 + skinQuality * 0.5));
+
+      if (motionDecay.current > 0) {
+        totalConf = Math.round(totalConf * (1 - motionDecay.current * 0.06));
+      }
+
+      confHistory.current.push(totalConf);
+      if (confHistory.current.length > 10) confHistory.current.shift();
+      const avgConf = Math.round(mean(confHistory.current));
+
+      if (finalRawBpm >= BPM_LO && finalRawBpm <= BPM_HI && avgConf >= 5) {
         bpmHistory.current.push(finalRawBpm);
         if (bpmHistory.current.length > HISTORY_LEN) bpmHistory.current.shift();
 
@@ -787,12 +839,19 @@ export function useHeartbeat(
             const sorted = [...cleaned].sort((a, b) => a - b);
             const medBpm = sorted[Math.floor(sorted.length / 2)];
             const jump = Math.abs(medBpm - bpmRef.current);
-            const qualityFactor = clamp(totalConf / 100, 0.1, 1);
-            const alpha = jump <= 5 ? 0.3 * qualityFactor
-                        : jump <= 12 ? 0.15 * qualityFactor
-                        : 0.08 * qualityFactor;
+            const qualityFactor = clamp(avgConf / 100, 0.1, 1);
+            const alpha = jump <= 4 ? 0.35 * qualityFactor
+                        : jump <= 8 ? 0.20 * qualityFactor
+                        : jump <= 15 ? 0.10 * qualityFactor
+                        : 0.05 * qualityFactor;
             bpmRef.current = Math.round(bpmRef.current * (1 - alpha) + medBpm * alpha);
           }
+        }
+
+        if (bpmRef.current !== null) {
+          const recentBpms = bpmHistory.current.slice(-5);
+          const bpmStd = std(recentBpms);
+          stabilityRef.current = clamp(1 - bpmStd / 15, 0, 1);
         }
       }
 
@@ -800,10 +859,12 @@ export function useHeartbeat(
       const stress: "low" | "medium" | "high" =
         finalBpm != null ? (finalBpm > 100 ? "high" : finalBpm > 83 ? "medium" : "low") : "low";
       const sqiLabel = result.sqi > 0.5 ? "HIGH" : result.sqi > 0.25 ? "MED" : "LOW";
+      const stab = stabilityRef.current;
+      const displayConf = Math.min(98, Math.round(avgConf * (0.7 + stab * 0.3)));
 
       setData(prev => ({
         bpm: finalBpm,
-        confidence: totalConf,
+        confidence: displayConf,
         signal: result.waveform.length > 0 ? result.waveform : result.spectrum,
         isActive: true,
         stress,
@@ -814,7 +875,7 @@ export function useHeartbeat(
         faceDetected: true,
         frameRate: Math.round(fpsRef.current),
         calibrating: finalBpm === null,
-        roiDebug: `${roi.label} SK:${Math.round(roi.skinRatio * 100)}%`,
+        roiDebug: `${roi.label} SK:${Math.round(roi.skinRatio * 100)}% S:${Math.round(stab * 100)}%`,
       }));
     } else if (frameRef.current % 20 === 0) {
       const rem = Math.max(0, minRequired - bufLen);
@@ -835,7 +896,8 @@ export function useHeartbeat(
     bpmRef.current = null; frameRef.current = 0;
     fpsRef.current = 30; prevMs.current = 0;
     bpmHistory.current = []; noFace.current = 0;
-    prevRGB.current = null;
+    prevRGB.current = null; confHistory.current = [];
+    stabilityRef.current = 0; motionDecay.current = 0;
     rafRef.current = requestAnimationFrame(processFrame);
   }, [processFrame]);
 
