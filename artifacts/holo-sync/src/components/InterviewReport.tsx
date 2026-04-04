@@ -225,7 +225,27 @@ export default function InterviewReport({
   bpmHistory, sessionTime, answerCount, evaluations,
   adaptiveTriggers, bluffTriggers, stressMarkers, onClose,
 }: InterviewReportProps) {
-  const overall = Math.round((score.communication + score.technical + score.stress) / 3);
+  const evalScores = evaluations.map(e => e.score);
+  const avgEvalScore = evalScores.length > 0
+    ? evalScores.reduce((a, b) => a + b, 0) / evalScores.length
+    : 0;
+  const evalPercent = Math.round(avgEvalScore * 10);
+
+  const answeredCount = evaluations.filter(e => !e.answer.includes("Time expired") && !e.answer.includes("no answer")).length;
+  const totalQuestions = evaluations.length || 1;
+  const answerRate = Math.round((answeredCount / totalQuestions) * 100);
+
+  const stressScore = score.stress;
+  const commScore = score.communication;
+  const techScore = score.technical;
+
+  const overall = Math.round(
+    evalPercent * 0.40 +
+    answerRate * 0.15 +
+    commScore * 0.15 +
+    techScore * 0.15 +
+    Math.min(stressScore, 100) * 0.15
+  );
   const avgBpm = bpmHistory.length > 0
     ? Math.round(bpmHistory.reduce((a, b) => a + b, 0) / bpmHistory.length)
     : 0;
@@ -402,12 +422,12 @@ export default function InterviewReport({
           <div className="p-4 rounded-lg border border-cyan-500/20 bg-black/40">
             <div className="text-xs font-mono text-cyan-400/60 uppercase tracking-widest mb-3">Core Scores</div>
             <div className="flex flex-col gap-3">
-              <ScoreBar label="Communication" value={score.communication} color="#4ecdc4" />
-              <ScoreBar label="Technical Knowledge" value={score.technical} color="#a78bfa" />
-              <ScoreBar label="Stress Management" value={score.stress} color={score.stress > 60 ? "#00ff88" : "#ff4444"} />
+              <ScoreBar label="Answer Quality (AI Eval)" value={evalPercent} color={evalPercent >= 60 ? "#00ff88" : evalPercent >= 40 ? "#ffaa00" : "#ff4444"} />
+              <ScoreBar label="Answer Rate" value={answerRate} color={answerRate >= 80 ? "#00ff88" : answerRate >= 50 ? "#ffaa00" : "#ff4444"} />
+              <ScoreBar label="Communication" value={commScore} color="#4ecdc4" />
+              <ScoreBar label="Technical Knowledge" value={techScore} color="#a78bfa" />
+              <ScoreBar label="Stress Management" value={stressScore} color={stressScore > 60 ? "#00ff88" : "#ff4444"} />
               <ScoreBar label="Eye Contact" value={eyeContact.percentage} color="#00ff88" />
-              <ScoreBar label="Vocabulary" value={analytics.vocabularyScore} color="#ffc078" />
-              <ScoreBar label="Confidence" value={analytics.confidenceScore} color="#ff6600" />
             </div>
           </div>
 

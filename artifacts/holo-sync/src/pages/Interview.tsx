@@ -355,6 +355,7 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
             didAdapt = true;
           }
           stressMarkersRef.current.push({ questionIndex: index, bpm: Math.round(recentBpm), type: "composure_break", timestamp: now, confidence: heartData.confidence ?? 0 });
+          setScore(prev => ({ ...prev, stress: Math.max(0, prev.stress - 12) }));
         }
       } else if (recentBpm < calmThreshold) {
         consecutiveCalmRef.current++;
@@ -420,6 +421,7 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
     const response = PRESSURE_RESPONSES[Math.floor(Math.random() * PRESSURE_RESPONSES.length)];
     addMessage({ role: "system", text: `⚠ STRESS DETECTED (Confidence: ${conf}%) — PRESSURE MAINTAINED` });
     stressMarkersRef.current.push({ questionIndex: currentQuestionIndex, bpm: heartData.bpm ?? 0, type: "stress_detected", timestamp: Date.now(), confidence: conf });
+    setScore(prev => ({ ...prev, stress: Math.max(0, prev.stress - 5) }));
     await speakMessage(response, domain.panelMode ? "CHAIRMAN" : "HOLO-AI");
     setTimeout(() => { setPressureMode(false); setAvatarEmotion("neutral"); }, 5000);
   }, [addMessage, speakMessage, currentQuestionIndex, heartData.bpm, heartData.confidence, domain.panelMode]);
@@ -438,12 +440,16 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
 
     const timeTaken = Math.round((Date.now() - questionStartRef.current) / 1000);
 
-    const vocabBonus = Math.round(speech.analytics.vocabularyScore * 0.04);
-    const confBonus = Math.round(speech.analytics.confidenceScore * 0.04);
+    const wordCount = text.trim().split(/\s+/).length;
+    const isSubstantive = wordCount >= 15;
+    const baseComm = isSubstantive ? 3 : 1;
+    const baseTech = isSubstantive ? 2 : 0;
+    const vocabBonus = isSubstantive ? Math.round(speech.analytics.vocabularyScore * 0.02) : 0;
+    const confBonus = isSubstantive ? Math.round(speech.analytics.confidenceScore * 0.02) : 0;
     setScore(prev => ({
       ...prev,
-      communication: Math.min(100, prev.communication + 7 + vocabBonus + Math.floor(Math.random() * 4)),
-      technical: Math.min(100, prev.technical + 5 + confBonus + Math.floor(Math.random() * 7)),
+      communication: Math.min(100, prev.communication + baseComm + vocabBonus),
+      technical: Math.min(100, prev.technical + baseTech + confBonus),
     }));
 
     const currentQ = activeQuestionRef.current || questions[currentQuestionIndex];
@@ -478,11 +484,14 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
           timeTaken,
           avatarName: currentQ?.avatarName,
         }]);
-        if (ev.score) {
+        if (ev.score != null) {
+          const evalS = Math.max(0, Math.min(10, ev.score));
+          const techDelta = evalS >= 7 ? (evalS - 5) : evalS >= 4 ? 0 : -(5 - evalS);
+          const commDelta = evalS >= 7 ? (evalS - 6) : evalS >= 4 ? 0 : -(4 - evalS);
           setScore(prev => ({
             ...prev,
-            technical: Math.min(100, prev.technical + Math.max(0, ev.score - 5)),
-            communication: Math.min(100, prev.communication + Math.max(0, ev.score - 6)),
+            technical: Math.max(0, Math.min(100, prev.technical + techDelta)),
+            communication: Math.max(0, Math.min(100, prev.communication + commDelta)),
           }));
         }
       })
@@ -558,6 +567,11 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
       suggestion: "Practice answering within the allotted time",
       timeTaken: answerTimeLimit, avatarName: activeQuestionRef.current?.avatarName,
     }]);
+    setScore(prev => ({
+      ...prev,
+      communication: Math.max(0, prev.communication - 3),
+      technical: Math.max(0, prev.technical - 4),
+    }));
     askNextQuestion(nextIndex);
   }, [phase, waitingForAnswer, currentQuestionIndex, answerTimeLimit, addMessage, askNextQuestion]);
 
@@ -566,7 +580,12 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
     setWaitingForAnswer(false);
     stopWebcam(); stopHeartbeat(); stopListening(); setMicOn(false);
     tts.stop();
-    const finalScore = Math.round((score.communication + score.technical + score.stress) / 3);
+    const evalAvg = evaluations.length > 0
+      ? evaluations.reduce((a, e) => a + e.score, 0) / evaluations.length : 0;
+    const evalPct = Math.round(evalAvg * 10);
+    const answered = evaluations.filter(e => !e.answer.includes("Time expired")).length;
+    const ansRate = Math.round((answered / Math.max(evaluations.length, 1)) * 100);
+    const finalScore = Math.round(evalPct * 0.40 + ansRate * 0.15 + score.communication * 0.15 + score.technical * 0.15 + Math.min(score.stress, 100) * 0.15);
     addMessage({ role: "system", text: "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" });
     addMessage({ role: "system", text: `INTERVIEW COMPLETE — FINAL SCORE: ${finalScore}/100` });
     setAvatarEmotion("neutral");
@@ -579,10 +598,18 @@ export default function Interview({ domain, config, onEnd }: InterviewProps) {
       "HOLO-AI"
     );
     setTimeout(() => setShowReport(true), 2000);
-  }, [score, heartData.stress, speech.analytics, stopWebcam, stopHeartbeat, stopListening, addMessage, speakMessage]);
+  }, [score, evaluations, heartData.stress, speech.analytics, stopWebcam, stopHeartbeat, stopListening, addMessage, speakMessage]);
 
   const formatTime = (s: number) => `${Math.floor(s/60).toString().padStart(2,"0")}:${(s%60).toString().padStart(2,"0")}`;
-  const overallScore = Math.round((score.communication + score.technical + (heartData.stress === "high" ? 50 : heartData.stress === "medium" ? 75 : 100)) / 3);
+  const liveEvalAvg = evaluations.length > 0
+    ? evaluations.reduce((a, e) => a + e.score, 0) / evaluations.length : 0;
+  const liveEvalPct = Math.round(liveEvalAvg * 10);
+  const liveAnswered = evaluations.filter(e => !e.answer.includes("Time expired")).length;
+  const liveAnsRate = Math.round((liveAnswered / Math.max(evaluations.length, 1)) * 100);
+  const liveStress = heartData.stress === "high" ? Math.min(score.stress, 50) : heartData.stress === "medium" ? Math.min(score.stress, 75) : score.stress;
+  const overallScore = evaluations.length > 0
+    ? Math.round(liveEvalPct * 0.40 + liveAnsRate * 0.15 + score.communication * 0.15 + score.technical * 0.15 + Math.min(liveStress, 100) * 0.15)
+    : 0;
   const isInputEmpty = !userInput.trim() && !speech.interimText.trim();
 
   return (
