@@ -324,6 +324,21 @@ export const QUESTIONS: Record<string, Question[]> = {
 
     { id: "n_pf_e1", text: "What is your daily fitness routine? How do you stay physically fit?", domain: "nda", topic: "physical_fitness", difficulty: "easy", avatarName: "COL. VERMA", avatarIndex: 1 },
     { id: "n_pf_m1", text: "An officer must be both mentally and physically tough. How do you train your mental resilience?", domain: "nda", topic: "physical_fitness", difficulty: "medium", avatarName: "BRIG. MEHTA", avatarIndex: 0 },
+
+    { id: "n_gk_e2", text: "Name the Chief of Defence Staff and the chiefs of Army, Navy, and Air Force.", domain: "nda", topic: "gk_current", difficulty: "easy", avatarName: "COL. VERMA", avatarIndex: 1 },
+    { id: "n_gk_h2", text: "Evaluate India's defense procurement process. What reforms would you suggest to reduce delays and corruption?", domain: "nda", topic: "gk_current", difficulty: "hard", avatarName: "BRIG. MEHTA", avatarIndex: 0 },
+    { id: "n_ld_e2", text: "What qualities make a good military officer? Which one do you think is most important?", domain: "nda", topic: "leadership", difficulty: "easy", avatarName: "COL. VERMA", avatarIndex: 1 },
+    { id: "n_ld_m2", text: "Your platoon is demoralized after a failed mission. How do you rebuild their confidence and morale?", domain: "nda", topic: "leadership", difficulty: "medium", avatarName: "BRIG. MEHTA", avatarIndex: 0 },
+    { id: "n_df_e2", text: "What is the Agnipath scheme? What are its objectives for the Indian Armed Forces?", domain: "nda", topic: "defence", difficulty: "easy", avatarName: "WING CDR. NAIR", avatarIndex: 2 },
+    { id: "n_df_m2", text: "Discuss the importance of cyber warfare in modern defense strategy. How prepared is India?", domain: "nda", topic: "defence", difficulty: "medium", avatarName: "COL. VERMA", avatarIndex: 1 },
+    { id: "n_pr_m2", text: "You are posted in a remote area. Your family is far away and you feel isolated. How do you cope?", domain: "nda", topic: "personality", difficulty: "medium", avatarName: "COL. VERMA", avatarIndex: 1 },
+    { id: "n_pr_e2", text: "What are your strengths and weaknesses? How do your weaknesses affect your performance?", domain: "nda", topic: "personality", difficulty: "easy", avatarName: "WING CDR. NAIR", avatarIndex: 2 },
+    { id: "n_hi_e1", text: "Name any three battles fought by the Indian Armed Forces since independence.", domain: "nda", topic: "history_nda", difficulty: "easy", avatarName: "BRIG. MEHTA", avatarIndex: 0 },
+    { id: "n_hi_h1", text: "Analyze the strategic mistakes in the 1962 Sino-Indian War. What lessons should India draw for future conflicts?", domain: "nda", topic: "history_nda", difficulty: "hard", avatarName: "WING CDR. NAIR", avatarIndex: 2 },
+    { id: "n_sc_e1", text: "What is radar? How does it help the armed forces?", domain: "nda", topic: "science_nda", difficulty: "easy", avatarName: "WING CDR. NAIR", avatarIndex: 2 },
+    { id: "n_sc_h1", text: "Discuss the role of artificial intelligence and autonomous weapons systems in future warfare. Should lethal autonomous weapons be banned?", domain: "nda", topic: "science_nda", difficulty: "hard", avatarName: "BRIG. MEHTA", avatarIndex: 0 },
+    { id: "n_gg_e1", text: "Name India's neighboring countries and identify the one that shares the longest border with India.", domain: "nda", topic: "geography_nda", difficulty: "easy", avatarName: "COL. VERMA", avatarIndex: 1 },
+    { id: "n_gg_h1", text: "Analyze the strategic significance of the Siachen Glacier and the Aksai Chin plateau for India's defense.", domain: "nda", topic: "geography_nda", difficulty: "hard", avatarName: "BRIG. MEHTA", avatarIndex: 0, isBullshitTrigger: true },
   ],
 
   medical: [
@@ -359,6 +374,18 @@ export const QUESTIONS: Record<string, Question[]> = {
 
     { id: "m_et_m1", text: "A patient refuses blood transfusion on religious grounds but is critically ill. How do you proceed? Discuss the ethical and legal aspects.", domain: "medical", topic: "ethics_med", difficulty: "medium", avatarName: "EXAMINER" },
     { id: "m_et_h1", text: "A 14-year-old girl comes alone requesting an abortion. She refuses to involve her parents. Discuss the ethical, legal, and medical considerations in India.", domain: "medical", topic: "ethics_med", difficulty: "hard", avatarName: "EXAMINER" },
+
+    { id: "m_an_e2", text: "What are the four chambers of the heart? Trace the path of blood flow through them.", domain: "medical", topic: "anatomy", difficulty: "easy", avatarName: "EXAMINER" },
+    { id: "m_ph_e2", text: "What is the difference between sympathetic and parasympathetic nervous system? Give examples of their effects.", domain: "medical", topic: "physiology", difficulty: "easy", avatarName: "EXAMINER" },
+    { id: "m_bc_h1", text: "A patient with a urea cycle disorder presents with hyperammonemia. Explain the biochemical basis and management.", domain: "medical", topic: "biochemistry", difficulty: "hard", avatarName: "EXAMINER" },
+    { id: "m_pa_e2", text: "What is an embolus? How does it differ from a thrombus?", domain: "medical", topic: "pathology", difficulty: "easy", avatarName: "EXAMINER" },
+    { id: "m_pm_e2", text: "What is an antibiotic? Name three classes with examples.", domain: "medical", topic: "pharmacology", difficulty: "easy", avatarName: "EXAMINER" },
+    { id: "m_md_e2", text: "What is hypertension? What are the normal blood pressure values according to current guidelines?", domain: "medical", topic: "medicine", difficulty: "easy", avatarName: "EXAMINER" },
+    { id: "m_su_e2", text: "What is appendicitis? Describe its classical presentation.", domain: "medical", topic: "surgery", difficulty: "easy", avatarName: "EXAMINER" },
+    { id: "m_pe_e1", text: "What is the importance of immunization? Name the vaccines in the Indian national immunization schedule.", domain: "medical", topic: "pediatrics", difficulty: "easy", avatarName: "EXAMINER" },
+    { id: "m_pe_h1", text: "A neonate presents with seizures on day 2 of life. Discuss the differential diagnosis and approach to management.", domain: "medical", topic: "pediatrics", difficulty: "hard", avatarName: "EXAMINER" },
+    { id: "m_ob_e1", text: "What are the signs of pregnancy? How do you confirm pregnancy in a clinic?", domain: "medical", topic: "obgyn", difficulty: "easy", avatarName: "EXAMINER" },
+    { id: "m_ob_h1", text: "A woman at 34 weeks of gestation presents with painless vaginal bleeding. What is your diagnosis, differential, and management plan?", domain: "medical", topic: "obgyn", difficulty: "hard", avatarName: "EXAMINER" },
   ],
 
   ibanking: [
@@ -390,6 +417,18 @@ export const QUESTIONS: Record<string, Question[]> = {
 
     { id: "i_bt_m1", text: "You have 8 balls, one is heavier. You have a balance scale. What is the minimum number of weighings to find the heavy ball?", domain: "ibanking", topic: "brain_teasers", difficulty: "medium", avatarName: "MD RAJIV KAPOOR" },
     { id: "i_bt_h1", text: "What is 17 times 23 in your head? Now tell me — approximately how many gas stations are there in India and how did you estimate?", domain: "ibanking", topic: "brain_teasers", difficulty: "hard", avatarName: "MD RAJIV KAPOOR" },
+
+    { id: "i_val_e2", text: "What is enterprise value? How does it differ from market capitalization?", domain: "ibanking", topic: "valuation", difficulty: "easy", avatarName: "MD RAJIV KAPOOR" },
+    { id: "i_val_h2", text: "You're valuing a high-growth SaaS company with negative earnings. Which valuation methodology would you use and why? Walk me through the assumptions.", domain: "ibanking", topic: "valuation", difficulty: "hard", avatarName: "MD RAJIV KAPOOR" },
+    { id: "i_acc_e2", text: "What is working capital? Why is it important for a company?", domain: "ibanking", topic: "accounting", difficulty: "easy", avatarName: "MD RAJIV KAPOOR" },
+    { id: "i_acc_m2", text: "What is the difference between GAAP and IFRS? Give two key differences.", domain: "ibanking", topic: "accounting", difficulty: "medium", avatarName: "MD RAJIV KAPOOR" },
+    { id: "i_ma_e2", text: "What are synergies in M&A? Give examples of revenue and cost synergies.", domain: "ibanking", topic: "mergers", difficulty: "easy", avatarName: "MD RAJIV KAPOOR" },
+    { id: "i_ma_m2", text: "Explain the concept of accretion and dilution in M&A. When is a deal dilutive?", domain: "ibanking", topic: "mergers", difficulty: "medium", avatarName: "MD RAJIV KAPOOR" },
+    { id: "i_lb_e1", text: "What is leverage? Why do private equity firms use it in buyouts?", domain: "ibanking", topic: "lbo", difficulty: "easy", avatarName: "MD RAJIV KAPOOR" },
+    { id: "i_cm_m2", text: "What is a bond? Explain the relationship between bond prices and interest rates.", domain: "ibanking", topic: "markets", difficulty: "medium", avatarName: "MD RAJIV KAPOOR" },
+    { id: "i_er_e1", text: "What is P/E ratio? How do you interpret a high vs low P/E?", domain: "ibanking", topic: "equity_research", difficulty: "easy", avatarName: "MD RAJIV KAPOOR" },
+    { id: "i_bf_m2", text: "Walk me through a typical day of an investment banking analyst. What skills are most critical?", domain: "ibanking", topic: "behavioral_ib", difficulty: "medium", avatarName: "MD RAJIV KAPOOR" },
+    { id: "i_bf_h1", text: "You're working on a live deal and notice your MD has made a material error in the client presentation. The meeting is in 30 minutes. What do you do?", domain: "ibanking", topic: "behavioral_ib", difficulty: "hard", avatarName: "MD RAJIV KAPOOR" },
   ],
 };
 
@@ -433,12 +472,34 @@ export function getFilteredQuestions(
   weighted.sort((a, b) => (b.weight + b.rand) - (a.weight + a.rand));
 
   const selected: Question[] = [];
-  const usedTopics = new Set<string>();
+  const usedIds = new Set<string>();
 
   for (const { q } of weighted) {
     if (selected.length >= maxQuestions) break;
     selected.push(q);
-    usedTopics.add(q.topic);
+    usedIds.add(q.id);
+  }
+
+  if (selected.length < maxQuestions) {
+    const supplement = allQuestions
+      .filter(q => !usedIds.has(q.id) && difficultyPool.includes(q.difficulty))
+      .map(q => ({ q, weight: weights[q.difficulty] || 1, rand: Math.random() }));
+    supplement.sort((a, b) => (b.weight + b.rand) - (a.weight + a.rand));
+    for (const { q } of supplement) {
+      if (selected.length >= maxQuestions) break;
+      selected.push(q);
+      usedIds.add(q.id);
+    }
+  }
+
+  if (selected.length < maxQuestions) {
+    const remaining = allQuestions
+      .filter(q => !usedIds.has(q.id))
+      .sort(() => Math.random() - 0.5);
+    for (const q of remaining) {
+      if (selected.length >= maxQuestions) break;
+      selected.push(q);
+    }
   }
 
   return selected;
