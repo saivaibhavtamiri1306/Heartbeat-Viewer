@@ -2,11 +2,10 @@ import { useState } from "react";
 import Landing from "./pages/Landing";
 import InterviewConfig from "./pages/InterviewConfig";
 import Interview from "./pages/Interview";
-import IdeaTab from "./components/IdeaTab";
 import type { Domain } from "./data/questions";
 import type { InterviewConfig as IConfig } from "./data/questions";
 
-type AppState = "landing" | "config" | "interview" | "idea";
+type AppState = "landing" | "config" | "interview";
 
 function App() {
   const [state, setState] = useState<AppState>("landing");
@@ -35,20 +34,15 @@ function App() {
     setInterviewConfig(null);
   };
 
-  const handleOpenIdea = () => {
-    setState("idea");
-  };
-
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {state === "landing" && <Landing onStart={handleSelectDomain} onOpenIdea={handleOpenIdea} />}
+      {state === "landing" && <Landing onStart={handleSelectDomain} />}
       {state === "config" && selectedDomain && (
         <InterviewConfig domain={selectedDomain} onStart={handleStartInterview} onBack={handleBack} />
       )}
       {state === "interview" && selectedDomain && interviewConfig && (
         <Interview domain={selectedDomain} config={interviewConfig} onEnd={handleEnd} />
       )}
-      {state === "idea" && <IdeaTab onBack={handleBack} />}
     </div>
   );
 }
