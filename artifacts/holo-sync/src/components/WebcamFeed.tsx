@@ -131,10 +131,10 @@ export default function WebcamFeed({
       const mx = dw - rx - rw;
 
       ctx.save();
-      ctx.fillStyle = "rgba(0, 255, 0, 0.25)";
+      ctx.fillStyle = "rgba(0, 255, 0, 0.55)";
       ctx.fillRect(mx, ry, rw, rh);
-      ctx.strokeStyle = "rgba(0, 255, 0, 0.6)";
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = "#00FF00";
+      ctx.lineWidth = 2;
       ctx.strokeRect(mx, ry, rw, rh);
       ctx.restore();
     }
@@ -148,10 +148,10 @@ export default function WebcamFeed({
       const mx = dw - rx - rw;
 
       ctx.save();
-      ctx.fillStyle = "rgba(0, 255, 0, 0.25)";
+      ctx.fillStyle = "rgba(0, 255, 0, 0.55)";
       ctx.fillRect(mx, ry, rw, rh);
-      ctx.strokeStyle = "rgba(0, 255, 0, 0.6)";
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = "#00FF00";
+      ctx.lineWidth = 2;
       ctx.strokeRect(mx, ry, rw, rh);
       ctx.restore();
     }
