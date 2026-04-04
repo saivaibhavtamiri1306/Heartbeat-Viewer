@@ -1,5 +1,4 @@
 [build]
-  base = "artifacts/holo-sync-deck"
   command = "pnpm --filter @workspace/holo-sync-deck... run build"
   publish = "artifacts/holo-sync-deck/dist"
 
