@@ -30,12 +30,12 @@ export interface HeartbeatData {
   roiDebug?: string;
 }
 
-const BUFFER_SIZE = 256;
+const BUFFER_SIZE = 300;
 const BPM_LO = 45;
 const BPM_HI = 180;
 const FL = BPM_LO / 60;
 const FH = BPM_HI / 60;
-const EMA = 0.3;
+const EMA = 0.35;
 const SMOOTH_WIN = 5;
 
 function clamp(v: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, v)); }
@@ -153,28 +153,59 @@ function computeSQI(mag: Float64Array, peakIdx: number, loIdx: number, hiIdx: nu
   return clamp(peakBand / totalBand, 0, 1);
 }
 
-// ── Best channel selection (ICA-inspired, heartwave/webcam-pulse-detector) ─
-// Pick the channel (R, G, B) with highest SNR in the heart rate band
+// ── CHROM-like chrominance method + best channel fallback ──────────────────
+// De Haan & Jeanne (2013): chrominance-based rPPG for better motion robustness
 function bestChannelFFT(
   rSig: number[], gSig: number[], bSig: number[], fps: number
 ): { bpm: number; confidence: number; sqi: number; waveform: number[]; spectrum: number[] } {
-  const results = [rSig, gSig, bSig].map(sig => analyzeChannel(sig, fps));
+  const N = rSig.length;
 
-  let best = results[1];
-  for (const r of results) {
-    if (r.snr > best.snr) best = r;
+  const rMean = rSig.reduce((s, v) => s + v, 0) / N || 1;
+  const gMean = gSig.reduce((s, v) => s + v, 0) / N || 1;
+  const bMean = bSig.reduce((s, v) => s + v, 0) / N || 1;
+
+  const rNorm = rSig.map(v => v / rMean);
+  const gNorm = gSig.map(v => v / gMean);
+  const bNorm = bSig.map(v => v / bMean);
+
+  const xs = new Array(N);
+  const ys = new Array(N);
+  for (let i = 0; i < N; i++) {
+    xs[i] = 3 * rNorm[i] - 2 * gNorm[i];
+    ys[i] = 1.5 * rNorm[i] + gNorm[i] - 1.5 * bNorm[i];
   }
-  return best;
+
+  const xFiltered = butterworthBandpass(xs, fps, FL, FH);
+  const yFiltered = butterworthBandpass(ys, fps, FL, FH);
+
+  const xStd = Math.sqrt(xFiltered.reduce((s, v) => s + v * v, 0) / N) || 1;
+  const yStd = Math.sqrt(yFiltered.reduce((s, v) => s + v * v, 0) / N) || 1;
+  const alpha = xStd / yStd;
+
+  const chromSig = new Array(N);
+  for (let i = 0; i < N; i++) {
+    chromSig[i] = xFiltered[i] - alpha * yFiltered[i];
+  }
+
+  const chromResult = analyzeChannel(chromSig, fps, true);
+
+  const greenResult = analyzeChannel(gSig, fps, false);
+
+  return chromResult.snr >= greenResult.snr ? chromResult : greenResult;
 }
 
 function analyzeChannel(
-  rawSig: number[], fps: number
+  rawSig: number[], fps: number, preFiltered = false
 ): { bpm: number; confidence: number; snr: number; sqi: number; waveform: number[]; spectrum: number[] } {
   const N = rawSig.length;
 
-  const smoothed = movingAvg(rawSig, SMOOTH_WIN);
-
-  const filtered = butterworthBandpass(smoothed, fps, FL, FH);
+  let filtered: number[];
+  if (preFiltered) {
+    filtered = movingAvg(rawSig, SMOOTH_WIN);
+  } else {
+    const smoothed = movingAvg(rawSig, SMOOTH_WIN);
+    filtered = butterworthBandpass(smoothed, fps, FL, FH);
+  }
 
   let pad = 1;
   while (pad < N * 2) pad <<= 1;
@@ -245,7 +276,7 @@ function sampleRGB(
     if (wi < 2 || hi < 2) return;
     try {
       const d = ctx.getImageData(xi, yi, wi, hi).data;
-      for (let i = 0; i < d.length; i += 16) {
+      for (let i = 0; i < d.length; i += 4) {
         totalR += d[i]; totalG += d[i + 1]; totalB += d[i + 2]; cnt++;
       }
       label = label ? label + "+" + lbl : lbl;
@@ -359,7 +390,7 @@ export function useHeartbeat(
 
     const bufLen = rBuf.current.length;
 
-    if (frameRef.current % 5 === 0 && bufLen >= 90) {
+    if (frameRef.current % 4 === 0 && bufLen >= 64) {
       const elapsed = (tsBuf.current[bufLen - 1] - tsBuf.current[0]) / 1000;
       const actualFps = (bufLen - 1) / elapsed;
 
@@ -367,14 +398,14 @@ export function useHeartbeat(
         rBuf.current, gBuf.current, bBuf.current, actualFps
       );
 
-      if (bpm >= BPM_LO && bpm <= BPM_HI && confidence >= 8) {
+      if (bpm >= BPM_LO && bpm <= BPM_HI && confidence >= 3) {
         bpmHistory.current.push(bpm);
-        if (bpmHistory.current.length > 15) bpmHistory.current.shift();
+        if (bpmHistory.current.length > 20) bpmHistory.current.shift();
 
         const cleaned = iqrFilter(bpmHistory.current);
 
         if (bpmRef.current === null) {
-          if (cleaned.length >= 3) {
+          if (cleaned.length >= 2) {
             const sorted = [...cleaned].sort((a, b) => a - b);
             bpmRef.current = sorted[Math.floor(sorted.length / 2)];
           }
@@ -410,7 +441,7 @@ export function useHeartbeat(
         roiDebug: roi.label,
       }));
     } else if (frameRef.current % 30 === 0) {
-      const rem = Math.max(0, 90 - bufLen);
+      const rem = Math.max(0, 64 - bufLen);
       setData(prev => ({
         ...prev, isActive: true, faceDetected: true,
         frameRate: Math.round(fpsRef.current),

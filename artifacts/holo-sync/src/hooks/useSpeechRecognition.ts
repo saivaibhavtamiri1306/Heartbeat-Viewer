@@ -63,28 +63,15 @@ function analyzeText(text: string): Pick<SpeechAnalytics, "wpm" | "fillerCount" 
 }
 
 const BASE = import.meta.env.BASE_URL || "/";
-const RECORD_INTERVAL_MS = 5000;
-
-function blobToBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const dataUrl = reader.result as string;
-      const base64 = dataUrl.split(",")[1] || "";
-      resolve(base64);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-}
+const RECORD_INTERVAL_MS = 6000;
 
 async function transcribeAudio(audioBlob: Blob): Promise<string> {
-  const base64 = await blobToBase64(audioBlob);
+  const formData = new FormData();
+  formData.append("file", audioBlob, "recording.webm");
 
   const resp = await fetch(`${BASE}api/transcribe`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ audio: base64 }),
+    body: formData,
   });
 
   if (!resp.ok) {
@@ -125,7 +112,10 @@ export function useSpeechRecognition() {
   const onResultRef = useRef<((text: string) => void) | null>(null);
 
   const handleTranscription = useCallback(async (blob: Blob) => {
-    if (processingRef.current) return;
+    if (processingRef.current) {
+      console.log(`[Speech] Skipped — still processing previous chunk`);
+      return;
+    }
     if (blob.size < 500) {
       console.log(`[Speech] Skipped tiny blob: ${blob.size} bytes`);
       return;
@@ -157,6 +147,7 @@ export function useSpeechRecognition() {
       }
     } catch (err: unknown) {
       console.error("Transcription error:", err);
+      setData(prev => ({ ...prev, error: err instanceof Error ? err.message : "Transcription failed" }));
     }
     processingRef.current = false;
   }, []);
@@ -168,23 +159,35 @@ export function useSpeechRecognition() {
     const mimeType = mimeTypeRef.current;
 
     try {
-      const recorder = new MediaRecorder(streamRef.current, { mimeType });
+      const recorder = new MediaRecorder(streamRef.current, {
+        mimeType,
+        audioBitsPerSecond: 128000,
+      });
       recorderRef.current = recorder;
 
       recorder.ondataavailable = (e) => {
         if (e.data && e.data.size > 0) {
           chunks.push(e.data);
+          console.log(`[Speech] Chunk received: ${e.data.size} bytes`);
         }
       };
 
       recorder.onstop = () => {
         if (chunks.length > 0) {
           const blob = new Blob(chunks, { type: mimeType });
+          console.log(`[Speech] Recording stopped, total blob: ${blob.size} bytes from ${chunks.length} chunks`);
           handleTranscription(blob);
+        } else {
+          console.log(`[Speech] Recording stopped but no chunks collected`);
         }
       };
 
-      recorder.start();
+      recorder.onerror = (e) => {
+        console.error("[Speech] MediaRecorder error:", e);
+      };
+
+      recorder.start(1000);
+      console.log(`[Speech] Recording started (${mimeType}), state: ${recorder.state}`);
 
       cycleTimerRef.current = setTimeout(() => {
         if (!isActiveRef.current) return;
@@ -197,7 +200,8 @@ export function useSpeechRecognition() {
       }, RECORD_INTERVAL_MS);
 
     } catch (err) {
-      console.error("MediaRecorder error:", err);
+      console.error("[Speech] MediaRecorder create error:", err);
+      setData(prev => ({ ...prev, error: `Recorder error: ${err}` }));
     }
   }, [handleTranscription]);
 
@@ -205,46 +209,65 @@ export function useSpeechRecognition() {
     onResultRef.current = onResult || null;
 
     try {
+      console.log("[Speech] Requesting microphone access...");
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: false,
           noiseSuppression: false,
           autoGainControl: true,
-          sampleRate: 16000,
         }
       });
       streamRef.current = stream;
 
-      const actx = new AudioContext();
-      const source = actx.createMediaStreamSource(stream);
-      const analyser = actx.createAnalyser();
-      analyser.fftSize = 256;
-      source.connect(analyser);
-      audioCtxRef.current = actx;
-      analyserRef.current = analyser;
+      const tracks = stream.getAudioTracks();
+      console.log(`[Speech] Got ${tracks.length} audio track(s):`, tracks.map(t => ({
+        label: t.label, enabled: t.enabled, muted: t.muted,
+        settings: t.getSettings?.() || "N/A",
+      })));
 
-      const dataArray = new Uint8Array(analyser.frequencyBinCount);
-      levelIntervalRef.current = setInterval(() => {
-        if (!analyserRef.current) return;
-        analyserRef.current.getByteFrequencyData(dataArray);
-        let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
-        const avg = sum / dataArray.length;
-        const level = Math.min(100, Math.round((avg / 128) * 100));
-        setData(prev => ({ ...prev, audioLevel: level }));
-      }, 200);
+      try {
+        const actx = new AudioContext();
+        const source = actx.createMediaStreamSource(stream);
+        const analyser = actx.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+        audioCtxRef.current = actx;
+        analyserRef.current = analyser;
 
-      if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
-        mimeTypeRef.current = "audio/webm;codecs=opus";
-      } else if (MediaRecorder.isTypeSupported("audio/webm")) {
-        mimeTypeRef.current = "audio/webm";
-      } else if (MediaRecorder.isTypeSupported("audio/mp4")) {
-        mimeTypeRef.current = "audio/mp4";
-      } else {
-        mimeTypeRef.current = "audio/webm";
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        levelIntervalRef.current = setInterval(() => {
+          if (!analyserRef.current) return;
+          analyserRef.current.getByteTimeDomainData(dataArray);
+          let maxAmplitude = 0;
+          for (let i = 0; i < dataArray.length; i++) {
+            const amplitude = Math.abs(dataArray[i] - 128);
+            if (amplitude > maxAmplitude) maxAmplitude = amplitude;
+          }
+          const level = Math.min(100, Math.round((maxAmplitude / 128) * 100));
+          setData(prev => {
+            if (Math.abs(prev.audioLevel - level) < 2) return prev;
+            return { ...prev, audioLevel: level };
+          });
+        }, 150);
+      } catch (e) {
+        console.warn("[Speech] AudioContext setup failed (non-critical):", e);
       }
 
-      console.log(`[Speech] Mic started, format: ${mimeTypeRef.current}, tracks:`, stream.getAudioTracks().map(t => ({ label: t.label, enabled: t.enabled, muted: t.muted })));
+      const supportedTypes = [
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/ogg;codecs=opus",
+        "audio/mp4",
+      ];
+      let foundType = "audio/webm";
+      for (const t of supportedTypes) {
+        if (MediaRecorder.isTypeSupported(t)) {
+          foundType = t;
+          break;
+        }
+      }
+      mimeTypeRef.current = foundType;
+      console.log(`[Speech] Using MIME type: ${foundType}`);
 
       isActiveRef.current = true;
       setData(prev => ({ ...prev, isListening: true, error: null, audioLevel: 0 }));
@@ -253,6 +276,7 @@ export function useSpeechRecognition() {
 
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Microphone access denied";
+      console.error("[Speech] getUserMedia failed:", msg);
       setData(prev => ({
         ...prev,
         error: msg.includes("ermission") || msg.includes("NotAllowed") || msg.includes("denied")
