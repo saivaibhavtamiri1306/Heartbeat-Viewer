@@ -32,18 +32,15 @@ export default async (req) => {
       apiKey: process.env.OPENAI_API_KEY,
     });
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-audio",
-      modalities: ["text", "audio"],
-      audio: { voice: selectedVoice, format: "mp3" },
-      messages: [
-        { role: "system", content: "You are an assistant that performs text-to-speech." },
-        { role: "user", content: `Repeat the following text verbatim: ${text}` },
-      ],
+    const mp3Response = await openai.audio.speech.create({
+      model: "tts-1",
+      voice: selectedVoice,
+      input: text,
+      response_format: "mp3",
     });
 
-    const audioData = response.choices[0]?.message?.audio?.data ?? "";
-    const audioBuffer = Buffer.from(audioData, "base64");
+    const arrayBuffer = await mp3Response.arrayBuffer();
+    const audioBuffer = Buffer.from(arrayBuffer);
 
     return new Response(audioBuffer, {
       status: 200,
@@ -55,7 +52,7 @@ export default async (req) => {
     });
   } catch (err) {
     console.error("TTS error:", err?.message || err);
-    return Response.json({ error: "TTS generation failed" }, {
+    return Response.json({ error: "TTS generation failed", detail: err?.message }, {
       status: 500,
       headers: { "Access-Control-Allow-Origin": "*" },
     });
