@@ -21,6 +21,10 @@ export default async (req) => {
   }
 
   try {
+    if (!process.env.OPENAI_API_KEY) {
+      return Response.json({ error: "OPENAI_API_KEY not configured" }, { status: 500 });
+    }
+
     const { question, answer, domain, difficulty, avatarName } = await req.json();
 
     if (!question || !answer || !domain) {
@@ -82,7 +86,7 @@ Rules:
     });
   } catch (err) {
     console.error("Follow-up error:", err?.message || err);
-    return Response.json({ error: "Follow-up generation failed" }, {
+    return Response.json({ error: "Follow-up generation failed", detail: err?.message }, {
       status: 500,
       headers: { "Access-Control-Allow-Origin": "*" },
     });
