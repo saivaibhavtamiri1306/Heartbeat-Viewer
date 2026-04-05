@@ -1,5 +1,5 @@
 [build]
-  command = "npm install openai && pnpm --filter @workspace/holo-sync... run build"
+  command = "pnpm install --no-frozen-lockfile && pnpm --filter @workspace/holo-sync... run build"
   publish = "artifacts/holo-sync/dist"
 
 [build.environment]
