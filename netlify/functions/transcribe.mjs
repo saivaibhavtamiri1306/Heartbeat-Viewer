@@ -37,11 +37,11 @@ export default async (req) => {
       audioBuffer = Buffer.from(body.audio, "base64");
     } else if (contentType.includes("multipart/form-data")) {
       const formData = await req.formData();
-      const file = formData.get("file");
-      if (!file) {
+      const formFile = formData.get("file");
+      if (!formFile) {
         return Response.json({ error: "No file provided" }, { status: 400 });
       }
-      const arrayBuffer = await file.arrayBuffer();
+      const arrayBuffer = await formFile.arrayBuffer();
       audioBuffer = Buffer.from(arrayBuffer);
     } else {
       const arrayBuffer = await req.arrayBuffer();
@@ -59,10 +59,10 @@ export default async (req) => {
     const detected = detectAudioFormat(audioBuffer);
     const format = (detected === "wav" || detected === "mp3") ? detected : "webm";
 
-    const file = await toFile(audioBuffer, `audio.${format}`);
+    const audioFile = await toFile(audioBuffer, `audio.${format}`);
     const response = await openai.audio.transcriptions.create({
-      file,
-      model: "gpt-4o-mini-transcribe",
+      file: audioFile,
+      model: "whisper-1",
     });
 
     const trimmed = (response.text || "").trim();
@@ -72,7 +72,7 @@ export default async (req) => {
     });
   } catch (err) {
     console.error("Transcribe error:", err?.message || err);
-    return Response.json({ error: "Transcription failed" }, {
+    return Response.json({ error: "Transcription failed", detail: err?.message }, {
       status: 500,
       headers: { "Access-Control-Allow-Origin": "*" },
     });
