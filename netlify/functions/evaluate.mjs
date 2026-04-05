@@ -21,6 +21,10 @@ export default async (req) => {
   }
 
   try {
+    if (!process.env.OPENAI_API_KEY) {
+      return Response.json({ error: "OPENAI_API_KEY not configured" }, { status: 500 });
+    }
+
     const { question, answer, domain } = await req.json();
 
     if (!question || !answer || !domain) {
@@ -86,7 +90,7 @@ Return ONLY valid JSON, no markdown or explanation.`,
     }
   } catch (err) {
     console.error("Evaluate error:", err?.message || err);
-    return Response.json({ error: "Evaluation failed" }, {
+    return Response.json({ error: "Evaluation failed", detail: err?.message }, {
       status: 500,
       headers: { "Access-Control-Allow-Origin": "*" },
     });
